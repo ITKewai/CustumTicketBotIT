@@ -87,23 +87,22 @@ class Ticket(commands.Cog):
                                                         'ticket_closer_user_id': y['ticket_closer_user_id']
                                                         }
         else:
-            await cursor.execute('SELECT * FROM datacenter WHERE server_id = ;')
-            x = await cursor.fetchall()
-            for y in x:
-                self.db_offline[int(y['server_id'])] = {'ticket_general_category_id': y['ticket_general_category_id'],
-                                                        'channel_id': y['channel_id'],
-                                                        'message_id': y['message_id'],
-                                                        'open_reaction_emoji': y['open_reaction_emoji'],
-                                                        'message_settings': literal_eval(y['message_settings']),
-                                                        'ticket_general_log_channel': y['ticket_general_log_channel'],
-                                                        'ticket_count': y['ticket_count'],
-                                                        'ticket_settings': y['ticket_settings'],
-                                                        'ticket_reaction_lock_ids': y['ticket_reaction_lock_ids'],
-                                                        'ticket_support_roles': y['ticket_support_roles'],
-                                                        'ticket_owner_id': literal_eval(y['ticket_owner_id']) if y[
-                                                            'ticket_owner_id'] else None,
-                                                        'ticket_closer_user_id': y['ticket_closer_user_id']
-                                                        }
+            await cursor.execute(f'SELECT * FROM datacenter WHERE server_id = {only_guild};')
+            y = await cursor.fetchone()
+            self.db_offline[int(y['server_id'])] = {'ticket_general_category_id': y['ticket_general_category_id'],
+                                                    'channel_id': y['channel_id'],
+                                                    'message_id': y['message_id'],
+                                                    'open_reaction_emoji': y['open_reaction_emoji'],
+                                                    'message_settings': literal_eval(y['message_settings']),
+                                                    'ticket_general_log_channel': y['ticket_general_log_channel'],
+                                                    'ticket_count': y['ticket_count'],
+                                                    'ticket_settings': y['ticket_settings'],
+                                                    'ticket_reaction_lock_ids': y['ticket_reaction_lock_ids'],
+                                                    'ticket_support_roles': y['ticket_support_roles'],
+                                                    'ticket_owner_id': literal_eval(y['ticket_owner_id']) if y[
+                                                        'ticket_owner_id'] else None,
+                                                    'ticket_closer_user_id': y['ticket_closer_user_id']
+                                                    }
 
     async def first_scan_db(self):
         disconn = await aiomysql.connect(host=host,
