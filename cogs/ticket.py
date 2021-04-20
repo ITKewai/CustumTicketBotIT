@@ -170,6 +170,7 @@ class Ticket(commands.Cog):
         await cursor.execute(f'UPDATE datacenter SET ticket_count = {ticket_count}, '
                              f'ticket_reaction_lock_ids = {ticket_reaction_lock_ids}'
                              f' WHERE server_id = {guild.id};')
+        # da sistemare sopra
         await self.load_db_var(guild_id)
         disconn.close()
 
