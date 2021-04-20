@@ -103,6 +103,7 @@ class Ticket(commands.Cog):
                                                         'ticket_owner_id'] else None,
                                                     'ticket_closer_user_id': y['ticket_closer_user_id']
                                                     }
+        disconn.close()
 
     async def first_scan_db(self):
         disconn = await aiomysql.connect(host=host,
@@ -124,11 +125,11 @@ class Ticket(commands.Cog):
                                  "ticket_closer_user_id varchar(255));")
         await self.load_db_var()
         self.db_ready = True
+        disconn.close()
         print(self.db_ready)
 
     async def create_ticket(self, bot, guild_id: int):
         guild = bot.get_guild(guild_id)
-
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id']
         category = bot.get_channel(ticket_general_category_id)
         ticket_count = self.db_offline[guild_id]['ticket_count'] + 1
@@ -150,6 +151,18 @@ class Ticket(commands.Cog):
                               colour=discord.Colour.green())
         ticket_reaction_lock_ids = await channel.send(embed=embed)
         await ticket_reaction_lock_ids.add_reaction('🔒')
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_count = {ticket_count}, '
+                             f'ticket_reaction_lock_ids = {ticket_reaction_lock_ids}'
+                             f' WHERE server_id = {guild.id};')
+        disconn.close()
 
     async def ready_db(self):
         await self.bot.wait_until_ready()
@@ -188,12 +201,11 @@ class Ticket(commands.Cog):
                                  " %s, %s);", (guild.id, category.id, channel.id, message.id,
                                                '📩', str(ticket_set), channel_archive.id, 0,
                                                ticket_settings))
-            await self.load_db_var()
+            await self.load_db_var(only_guild=guild.id)
         except Exception as error:
             print(error)
 
         disconn.close()
-
 
     async def add_support_role_ticket_db(self, bot, guild, role_ids: list):
         disconn = await aiomysql.connect(host=host,
