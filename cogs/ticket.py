@@ -167,9 +167,8 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE datacenter SET ticket_count = {ticket_count}, '
-                             f'ticket_reaction_lock_ids = {ticket_reaction_lock_ids}'
-                             f' WHERE server_id = {guild.id};')
+        await cursor.execute(f'UPDATE datacenter SET ticket_count = %s, ticket_reaction_lock_ids = %s'
+                             f' WHERE server_id = %s;', (ticket_count, ticket_reaction_lock_ids, guild.id))
         # da sistemare sopra
         await self.load_db_var(guild_id)
         disconn.close()
