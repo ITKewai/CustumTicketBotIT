@@ -251,8 +251,18 @@ class Ticket(commands.Cog):
     async def remove_support_role_ticket_db(self):
         pass
 
-    async def close_ticket(self):
-        pass
+    async def close_ticket(self, channel_id, user_id):
+        # LOADING OFFLINE DATABASE
+        ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id']
+        category = self.bot.get_channel(ticket_general_category_id)
+        ticket_count = self.db_offline[guild_id]['ticket_count'] + 1
+        ticket_settings = self.db_offline[guild_id]['ticket_settings']
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
+        ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids']
+        ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id']
+        guild = self.bot.get_guild(guild_id)
+        member = guild.get_member(user_id)
+        # END
 
 def setup(bot):
     bot.add_cog(Ticket(bot))
