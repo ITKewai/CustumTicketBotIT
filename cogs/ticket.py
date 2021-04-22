@@ -156,7 +156,6 @@ class Ticket(commands.Cog):
             return await member.send('Hai già un ticket aperto ! ')
         # END
 
-
         # TICKET CHANNEL RELATED
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False, ),
@@ -249,6 +248,11 @@ class Ticket(commands.Cog):
         cursor = await disconn.cursor(aiomysql.DictCursor)
         await cursor.execute(f"UPDATE x{guild.id} SET WHERE 1;")
 
+    async def remove_support_role_ticket_db(self):
+        pass
+
+    async def close_ticket(self):
+        pass
 
 def setup(bot):
     bot.add_cog(Ticket(bot))
