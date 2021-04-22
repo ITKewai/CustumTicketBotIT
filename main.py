@@ -6,8 +6,8 @@ import sys
 import jishaku
 
 intents = discord.Intents.default()
-# intents.members = True  # Subscribe to the privileged members intent.
-# intents.presences = True  # Subscribe to the privileged members intent.
+intents.members = True  # Subscribe to the privileged members intent.
+intents.presences = True  # Subscribe to the privileged members intent.
 intents.reactions = True
 bot = commands.Bot(command_prefix='-', case_insensitive=True,
                    allowed_mentions=discord.AllowedMentions(everyone=False, roles=False), intents=intents)
