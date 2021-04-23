@@ -36,6 +36,7 @@ class Ticket(commands.Cog):
                     # message = await channel.fetch_message(payload.message_id)
                     # await message.remove_reaction(str(payload.emoji), member)
                     await self.create_ticket(payload.guild_id, payload.user_id)
+                elif
 
     @commands.command()
     async def setup(self, ctx):
@@ -267,13 +268,20 @@ class Ticket(commands.Cog):
         await channel.delete()
         # SEND LOG CHANNEL INFO
         channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'])
-        embed = discord.Embed(title="Ticket Chiuoso", description='BLA BLA LBA',
-                              colour=discord.Colour.green())
+        message_id = [k for k, v in ticket_reaction_lock_ids.items() if v == channel_id][0]
+
+        open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][message_id])
+        closer_user_obj = self.bot.get_user(closer_user_id)
+        embed = discord.Embed(title="Ticket Chiuso", description='', olour=discord.Colour.green())
+        embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
+        embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
+        embed.add_field(name='Alle ore', value='XX:XX DEL XX/XX/XX', inline=True)
+
         await channel.send(embed=embed)
         # ticket_reaction_lock_ids[message.id] = channel.id
         # ticket_owner_id[message.id] = user_id
 
-        ticket_reaction_lock_ids.pop([k for k, v in ticket_reaction_lock_ids.items() if v == channel_id][0])
+        # ticket_reaction_lock_ids.pop()
 
 
 def setup(bot):
