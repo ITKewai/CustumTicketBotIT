@@ -251,7 +251,7 @@ class Ticket(commands.Cog):
     async def remove_support_role_ticket_db(self):
         pass
 
-    async def close_ticket(self, channel_id, user_id):
+    async def close_ticket(self, guild_id, channel_id, closer_user_id):
         # LOADING OFFLINE DATABASE
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id']
         category = self.bot.get_channel(ticket_general_category_id)
@@ -260,9 +260,21 @@ class Ticket(commands.Cog):
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
         ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids']
         ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id']
+
+        # CLOSE TICKET CHANNEL
         guild = self.bot.get_guild(guild_id)
-        member = guild.get_member(user_id)
-        # END
+        channel = self.bot.get_channel(channel_id)
+        await channel.delete()
+        # SEND LOG CHANNEL INFO
+        channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'])
+        embed = discord.Embed(title="Ticket Chiuoso", description='BLA BLA LBA',
+                              colour=discord.Colour.green())
+        await channel.send(embed=embed)
+        # ticket_reaction_lock_ids[message.id] = channel.id
+        # ticket_owner_id[message.id] = user_id
+
+        ticket_reaction_lock_ids.pop([k for k, v in ticket_reaction_lock_ids.items() if v == channel_id][0])
+
 
 def setup(bot):
     bot.add_cog(Ticket(bot))
