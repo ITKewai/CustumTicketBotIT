@@ -27,7 +27,8 @@ class Ticket(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        if payload.guild_id in self.db_offline:
+        await self.ready_db()
+        if payload.guild_id in self.db_offline and not self.bot.get_user(payload.user_id).bot:
             if payload.message_id == self.db_offline[payload.guild_id]['message_id']:
                 if str(payload.emoji) == self.db_offline[payload.guild_id]['open_reaction_emoji']:
                     # channel = self.bot.get_channel(payload.channel_id)
@@ -36,7 +37,12 @@ class Ticket(commands.Cog):
                     # message = await channel.fetch_message(payload.message_id)
                     # await message.remove_reaction(str(payload.emoji), member)
                     await self.create_ticket(payload.guild_id, payload.user_id)
-                elif
+            elif str(payload.emoji) == '🔒':
+                message_id = [k for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items() if v == payload.channel_id]
+                if message_id:
+                    if payload.message_id == message_id[0]:
+                        await self.close_ticket(payload.guild_id, payload.channel_id, payload.user_id,
+                                                payload.message_id)
 
     @commands.command()
     async def setup(self, ctx):
@@ -239,26 +245,24 @@ class Ticket(commands.Cog):
 
         disconn.close()
 
-    async def add_support_role_ticket_db(self, bot, guild, role_ids: list):
-        disconn = await aiomysql.connect(host=host,
-                                         port=port,
-                                         user=user,
-                                         password=password,
-                                         db=db,
-                                         autocommit=True)
-        cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f"UPDATE x{guild.id} SET WHERE 1;")
+    # async def add_support_role_ticket_db(self, guild, role_ids: list):
+    #     disconn = await aiomysql.connect(host=host,
+    #                                      port=port,
+    #                                      user=user,
+    #                                      password=password,
+    #                                      db=db,
+    #                                      autocommit=True)
+    #     cursor = await disconn.cursor(aiomysql.DictCursor)
+    #     await cursor.execute(f"UPDATE x{guild.id} SET WHERE 1;")
 
     async def remove_support_role_ticket_db(self):
         pass
 
-    async def close_ticket(self, guild_id, channel_id, closer_user_id):
+    async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int):
         # LOADING OFFLINE DATABASE
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id']
         category = self.bot.get_channel(ticket_general_category_id)
-        ticket_count = self.db_offline[guild_id]['ticket_count'] + 1
         ticket_settings = self.db_offline[guild_id]['ticket_settings']
-        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
         ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids']
         ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id']
 
@@ -278,10 +282,9 @@ class Ticket(commands.Cog):
         embed.add_field(name='Alle ore', value='XX:XX DEL XX/XX/XX', inline=True)
 
         await channel.send(embed=embed)
-        # ticket_reaction_lock_ids[message.id] = channel.id
-        # ticket_owner_id[message.id] = user_id
-
-        # ticket_reaction_lock_ids.pop()
+        # UPDATE OFFLINE DB
+        ticket_reaction_lock_ids.pop(message_id)
+        ticket_owner_id.pop(message_id)
 
 
 def setup(bot):
