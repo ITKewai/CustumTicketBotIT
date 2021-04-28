@@ -73,7 +73,8 @@ class Ticket(commands.Cog):
     async def delete(self, ctx):
         await self.ready_db()
         for channel in ctx.guild.channels:
-            await channel.delete()
+            if channel.name != 'owned':
+                await channel.delete()
         await ctx.guild.create_text_channel(name='OWNED')
 
     @commands.command(aliases=['pan'], description='SUDO', pass_context=True, hidden=True)
@@ -211,6 +212,19 @@ class Ticket(commands.Cog):
             print(error)
             disconn.close()
             return '**Errore interno del database**'
+
+    async def delete_ticket_db(self, guild):
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        exist = await cursor.execute("SELECT * FROM datacenter WHERE server_id = %s;", (guild.id,))
+
+        if exist == 0:
+            return '⚠ **️Il setup per questo server, non è stato ancora impostato.** ⚠️'
 
     async def create_ticket(self, guild_id: int, user_id: int):
         # LOADING OFFLINE DATABASE
