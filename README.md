@@ -1,2 +1,2 @@
 # CustumTicketBotIT
-DISCORD TEST SERVER : https://discord.gg/ZcDaBXMTDr
+DISCORD TEST SERVER :  None
