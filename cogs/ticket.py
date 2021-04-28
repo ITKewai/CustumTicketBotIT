@@ -323,7 +323,6 @@ class Ticket(commands.Cog):
         await channel.delete()
         # SEND LOG CHANNEL INFO
         channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'])
-        message_id = [k for k, v in ticket_reaction_lock_ids.items() if v == channel_id][0]
 
         open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][message_id])
         closer_user_obj = self.bot.get_user(closer_user_id)
@@ -351,6 +350,8 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
+        # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
+        # TODO:
 
 def setup(bot):
     bot.add_cog(Ticket(bot))
