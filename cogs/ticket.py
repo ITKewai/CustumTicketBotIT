@@ -61,7 +61,7 @@ class Ticket(commands.Cog):
     @commands.command()
     async def setup(self, ctx):
         await self.ready_db()
-        await self.insert_ticket_db(guild=ctx.guild)
+        await ctx.send(await self.insert_ticket_db(guild=ctx.guild))
 
     @commands.command(aliases=['addsupport'], description='SUDO', pass_context=True, hidden=True)
     async def add_support(self, ctx, role: discord.Role):
@@ -175,6 +175,11 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
+        exist = await cursor.execute("SELECT * FROM datacenter WHERE server_id = %s;", (guild.id,))
+
+        if exist == 1:
+            return '⚠ **️Il setup per questo server, è gia stato impostato una volta.** ⚠️\n\n' \
+                   'Se vuoi cancellare tutti i ticket e le impostazioni usa il comando **reset**'
 
         category = await guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
         channel = await guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category, reason=None)
@@ -200,10 +205,12 @@ class Ticket(commands.Cog):
                                                '📩', str(ticket_set), channel_archive.id, 0,
                                                ticket_settings, str({}), str([]), str({}), str({})))
             await self.load_db_var(only_guild=guild.id)
+            disconn.close()
+            return '**Creazione canali completate, TICKET abilitati**'
         except Exception as error:
             print(error)
-
-        disconn.close()
+            disconn.close()
+            return '**Errore interno del database**'
 
     async def create_ticket(self, guild_id: int, user_id: int):
         # LOADING OFFLINE DATABASE
@@ -352,6 +359,7 @@ class Ticket(commands.Cog):
 
         # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
         # TODO:
+
 
 def setup(bot):
     bot.add_cog(Ticket(bot))

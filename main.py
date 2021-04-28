@@ -23,6 +23,7 @@ bot.load_extension('jishaku')
 @bot.event
 async def on_ready():
     print("Pronto come", bot.user)
+    print(f"https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=8&scope=bot")
     await bot.change_presence(activity=discord.Game(name="BETA-DEVELOPING"))
 
 bot.run('N'  # YES I KNOW THIS IS A BOT TOKEN BUT I DON'T CARE 😂
