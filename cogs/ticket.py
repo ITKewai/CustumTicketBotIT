@@ -157,11 +157,17 @@ class Ticket(commands.Cog):
         x = await cursor.execute("SHOW tables like 'datacenter'")
         if x == 0:
             await cursor.execute("CREATE TABLE datacenter (server_id varchar(20), "
-                                 "ticket_general_category_id bigint(20), channel_id bigint(20), "
-                                 "message_id bigint(20), open_reaction_emoji varchar(255), message_settings text, "
-                                 "ticket_general_log_channel bigint(20), ticket_count bigint(20), "
-                                 "ticket_settings text, ticket_reaction_lock_ids text, "
-                                 "ticket_support_roles text, ticket_owner_id text, "
+                                 "ticket_general_category_id bigint(20), "
+                                 "channel_id bigint(20), "
+                                 "message_id bigint(20), "
+                                 "open_reaction_emoji varchar(255), "
+                                 "message_settings text, "
+                                 "ticket_general_log_channel bigint(20), "
+                                 "ticket_count bigint(20), "
+                                 "ticket_settings text, "
+                                 "ticket_reaction_lock_ids text, "
+                                 "ticket_support_roles text, "
+                                 "ticket_owner_id text, "
                                  "ticket_closer_user_id varchar(255));")
         await self.load_db_var()
         self.db_ready = True
@@ -372,7 +378,16 @@ class Ticket(commands.Cog):
         disconn.close()
 
         # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
-        # TODO:
+        # TODO: SPUNTE PER CONFERMA CHIUSURA TICKET
+        # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA
+
+        # TODO: METTERE PIU PANNELLI
+        # TODO: SETTARE RUOLI PER OGNI PANNELLO
+        # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
+        # TODO: SOLO I RUOLI ADMIN POSSONO MODIFICARE I PANNELLI
+        # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user)
+        # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET
+        # TODO: OPZIONALE SE HA IN COMUNE PIU DI UN SERVER DISCORD CHIEDE IN QUALE APRIRE IL TICKET
 
 
 def setup(bot):
