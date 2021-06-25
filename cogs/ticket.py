@@ -62,8 +62,13 @@ class Ticket(commands.Cog):
                                           ' ```diff\n-C\'E\' STATO UN ERRORE, RIPROVA PIU\' TARDI\'```')
             elif str(payload.emoji) == '🔒':
                 # CONTINUA DA QUI
-                message_id = [k for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items() if
-                              v == payload.channel_id]
+                message_id = [l for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items() for l, b in v.items()if b == payload.channel_id]
+
+                # for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items():
+                #     for l, b in v.items():
+                #         if b == payload.channel_id:
+                #             message_id.append(l)
+
                 if message_id:
                     if payload.message_id == message_id[0]:
                         await self.close_ticket(payload.guild_id, payload.channel_id, payload.user_id,
@@ -122,18 +127,22 @@ class Ticket(commands.Cog):
             x = await cursor.fetchall()
             for y in x:
                 self.db_offline[int(y['server_id'])] = {'ticket_reference': literal_eval(y['ticket_reference']),
-                                                        'ticket_general_category_id': literal_eval(y['ticket_general_category_id']),
+                                                        'ticket_general_category_id': literal_eval(
+                                                            y['ticket_general_category_id']),
                                                         'channel_id': literal_eval(y['channel_id']),
                                                         'message_id': literal_eval(y['message_id']),
                                                         'open_reaction_emoji': literal_eval(y['open_reaction_emoji']),
                                                         'message_settings': literal_eval(y['message_settings']),
-                                                        'ticket_general_log_channel': literal_eval(y['ticket_general_log_channel']),
+                                                        'ticket_general_log_channel': literal_eval(
+                                                            y['ticket_general_log_channel']),
                                                         'ticket_count': literal_eval(y['ticket_count']),
                                                         'ticket_settings': literal_eval(y['ticket_settings']),
-                                                        'ticket_reaction_lock_ids': literal_eval(y['ticket_reaction_lock_ids']),
+                                                        'ticket_reaction_lock_ids': literal_eval(
+                                                            y['ticket_reaction_lock_ids']),
                                                         'ticket_support_roles': literal_eval(y['ticket_support_roles']),
                                                         'ticket_owner_id': literal_eval(y['ticket_owner_id']),
-                                                        'ticket_closer_user_id': literal_eval(y['ticket_closer_user_id'])
+                                                        'ticket_closer_user_id': literal_eval(
+                                                            y['ticket_closer_user_id'])
                                                         }
         else:
             await cursor.execute(f'SELECT * FROM datacenter WHERE server_id = {only_guild};')
@@ -264,7 +273,13 @@ class Ticket(commands.Cog):
             return '⚠ **️Il setup per questo server, non è stato ancora impostato.** ⚠️'
 
     async def return_ticket_reference(self, guild_id: int, name_of_table: str, element):
-        return str(list(self.db_offline[guild_id][name_of_table].keys())[list(self.db_offline[guild_id][name_of_table].values()).index(element)])
+        try:
+            return str(list(self.db_offline[guild_id][name_of_table].keys())[
+                           list(self.db_offline[guild_id][name_of_table].values()).index(element)])
+        except:
+            for y, z in self.db_offline[guild_id][name_of_table].items():
+                if element in z.values():
+                    return y
 
     async def create_ticket(self, guild_id: int, user_id: int, ticket_reference: str):
         # LOADING OFFLINE DATABASE
@@ -285,7 +300,8 @@ class Ticket(commands.Cog):
                 # ticket_owner_id[message.id] = user_id
                 oof = [k for k, v in self.db_offline[guild_id]['ticket_owner_id'].items() if v == user_id]
                 if oof:
-                    channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
+                    channel = self.bot.get_channel(
+                        self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
                     if channel:
                         return await channel.send(member.mention +
                                                   '```diff\n-Hai già un ticket aperto utilizza questo! ```')
@@ -316,7 +332,8 @@ class Ticket(commands.Cog):
         # UPDATE DATABASE DATA
         ticket_reaction_lock_ids[message.id] = channel.id
         ticket_owner_id[message.id] = user_id
-        self.db_offline[guild_id]['ticket_count'][ticket_reference] = self.db_offline[guild_id]['ticket_count'][ticket_reference] + 1
+        self.db_offline[guild_id]['ticket_count'][ticket_reference] = self.db_offline[guild_id]['ticket_count'][
+                                                                          ticket_reference] + 1
 
         await message.add_reaction('🔒')
         disconn = await aiomysql.connect(host=host,
@@ -331,7 +348,7 @@ class Ticket(commands.Cog):
                              (str(self.db_offline[guild_id]['ticket_count']),
                               str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
                               str(self.db_offline[guild_id]['ticket_owner_id']),
-                              guild.id),)
+                              guild.id), )
 
         await self.load_db_var(guild_id)
         disconn.close()
@@ -374,21 +391,27 @@ class Ticket(commands.Cog):
         return f'✅ Il ruolo <@&{role_id}> può gestire i ticket d\'ora in poi'
 
     async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int):
+        # ASK FOR REFERENCE
+        ticket_reference = await self.return_ticket_reference(guild_id=guild_id,
+                                                              name_of_table='ticket_reaction_lock_ids',
+                                                              element=channel_id)
+
         # LOADING OFFLINE DATABASE
-        ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id']
+        ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id'][ticket_reference]
         category = self.bot.get_channel(ticket_general_category_id)
-        ticket_settings = self.db_offline[guild_id]['ticket_settings']
-        ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids']
-        ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id']
+        ticket_settings = self.db_offline[guild_id]['ticket_settings'][ticket_reference]
+        ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference]
+        ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id'][ticket_reference]
 
         # CLOSE TICKET CHANNEL
         guild = self.bot.get_guild(guild_id)
         channel = self.bot.get_channel(channel_id)
         await channel.delete()
-        # SEND LOG CHANNEL INFO
-        channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'])
 
-        open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][message_id])
+        # SEND LOG CHANNEL INFO
+        channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
+
+        open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][ticket_reference][message_id])
         closer_user_obj = self.bot.get_user(closer_user_id)
         embed = discord.Embed(title="Ticket Chiuso", description='', olour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
@@ -397,8 +420,8 @@ class Ticket(commands.Cog):
 
         await channel.send(embed=embed)
         # UPDATE OFFLINE DB
-        ticket_reaction_lock_ids.pop(message_id)
-        ticket_owner_id.pop(message_id)
+        self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].pop(message_id)
+        self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].pop(message_id)
 
         disconn = await aiomysql.connect(host=host,
                                          port=port,
@@ -409,7 +432,8 @@ class Ticket(commands.Cog):
         cursor = await disconn.cursor(aiomysql.DictCursor)
         await cursor.execute(f'UPDATE datacenter SET ticket_reaction_lock_ids = %s, '
                              f'ticket_owner_id = %s WHERE server_id = %s;',
-                             (str(ticket_reaction_lock_ids), str(ticket_owner_id), guild.id), )
+                             (str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
+                              str(self.db_offline[guild_id]['ticket_owner_id']), guild.id), )
 
         await self.load_db_var(guild_id)
         disconn.close()
@@ -425,6 +449,7 @@ class Ticket(commands.Cog):
         # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user)
         # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET
         # TODO: OPZIONALE SE HA IN COMUNE PIU DI UN SERVER DISCORD CHIEDE IN QUALE APRIRE IL TICKET
+        # TODO: AGGIUNGERE IGNORARA SERVER NEI EVENT LISTENER
 
 
 def setup(bot):
