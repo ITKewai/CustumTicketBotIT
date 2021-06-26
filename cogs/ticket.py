@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import json
+import traceback
 from ast import literal_eval
 
 import discord
@@ -20,6 +21,7 @@ class Ticket(commands.Cog):
         self.bot = bot
         self.db_ready = False
         self.db_offline = {}
+        self.antispam_lock = []
         print(self.db_ready)
 
     async def ready_db(self):
@@ -61,18 +63,65 @@ class Ticket(commands.Cog):
                         await member.send(member.mention +
                                           ' ```diff\n-C\'E\' STATO UN ERRORE, RIPROVA PIU\' TARDI\'```')
             elif str(payload.emoji) == '🔒':
-                # CONTINUA DA QUI
-                message_id = [l for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items() for l, b in v.items()if b == payload.channel_id]
+                try:
+                    message_id = [l for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items()
+                                  for
+                                  l, b in v.items() if b == payload.channel_id]
 
-                # for k, v in self.db_offline[payload.guild_id]['ticket_reaction_lock_ids'].items():
-                #     for l, b in v.items():
-                #         if b == payload.channel_id:
-                #             message_id.append(l)
+                    if message_id:
+                        if payload.message_id == message_id[0]:
+                            guild = self.bot.get_guild(payload.guild_id)
+                            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+                            member = guild.get_member(payload.user_id)
+                            await message.remove_reaction(payload.emoji, member)
 
-                if message_id:
-                    if payload.message_id == message_id[0]:
-                        await self.close_ticket(payload.guild_id, payload.channel_id, payload.user_id,
-                                                payload.message_id)
+                            ticket_reference = await self.return_ticket_reference(guild_id=payload.guild_id,
+                                                                                  name_of_table='ticket_reaction_lock_ids',
+                                                                                  element=payload.channel_id)
+                            ticket_owner = await self.return_ticket_owner_id_raw(guild_id=payload.guild_id,
+                                                                                 tick_message=payload.message_id,
+                                                                                 ticket_reference=ticket_reference)
+                            ticket_support = await self.return_ticket_support_roles_id(guild_id=payload.guild_id,
+                                                                                       ticket_reference=ticket_reference)
+
+                            def check(raw_payload):
+                                return raw_payload.member and str(raw_payload.emoji) in ['❌', '✅'] \
+                                       and \
+                                       (raw_payload.user_id == ticket_owner or
+                                        any(role for role in ticket_support if
+                                            role in [role.id for role in raw_payload.member.roles]))
+
+                            #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
+                            if (not any(role for role in ticket_support if role in [role.id for role in payload.member.roles])) and payload.user_id != ticket_owner:
+                                return
+                            await message.add_reaction('❌')
+                            await message.add_reaction('✅')
+
+                            try:
+                                _payload = await self.bot.wait_for("raw_reaction_add", timeout=30.0, check=check)
+
+                                if str(_payload.emoji) == '✅':
+                                    await message.clear_reaction('❌')
+                                    await message.clear_reaction('✅')
+                                    await self.close_ticket(guild_id=payload.guild_id,
+                                                            channel_id=payload.channel_id,
+                                                            closer_user_id=payload.user_id,
+                                                            message_id=payload.message_id,
+                                                            ticket_reference=ticket_reference)
+
+                                elif str(_payload.emoji) == '❌':
+                                    await message.clear_reaction('❌')
+                                    await message.clear_reaction('✅')
+
+                            except asyncio.TimeoutError:
+                                print(asyncio.TimeoutError)
+                                await message.clear_reaction('❌')
+                                await message.clear_reaction('✅')
+                                return
+                except:
+                    # TODO: AGGIUNGERE ANTI SPAM REACTION
+                    import sys
+                    sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
 
     @commands.command()
     async def setup(self, ctx):
@@ -80,9 +129,10 @@ class Ticket(commands.Cog):
         await ctx.send(await self.first_ticket_setup(guild=ctx.guild))
 
     @commands.command(aliases=['addsupport'], description='SUDO', pass_context=True, hidden=True)
-    async def add_support(self, ctx, role: discord.Role):
+    async def add_support(self, ctx, role: discord.Role, ticket_reference='DEFAULT'):
         await self.ready_db()
-        await ctx.send(await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id))
+        await ctx.send(
+            await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
 
     @commands.command()
     @commands.is_owner()
@@ -281,6 +331,14 @@ class Ticket(commands.Cog):
                 if element in z.values():
                     return y
 
+    async def return_ticket_owner_id_raw(self, guild_id: int, tick_message: int, ticket_reference):
+        for y, z in self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].items():
+            if y == tick_message:
+                return z
+
+    async def return_ticket_support_roles_id(self, guild_id: int, ticket_reference):
+        return self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
+
     async def create_ticket(self, guild_id: int, user_id: int, ticket_reference: str):
         # LOADING OFFLINE DATABASE
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id'][ticket_reference]
@@ -353,8 +411,8 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
-    async def add_support_role(self, guild_id: int, role_id: int):
-        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
+    async def add_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         if role_id in ticket_support_roles:
             return f'⚠ ️Il ruolo <@&{role_id}> può già gestire i ticket'
         else:
@@ -368,12 +426,12 @@ class Ticket(commands.Cog):
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
-                             (str(ticket_support_roles), guild_id))
+                             (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
         return f'✅ Il ruolo <@&{role_id}> ha i permessi i ticket d\'ora in poi'
 
-    async def remove_support_role_ticket_db(self, guild_id: int, role_id: int):
-        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles']
+    async def remove_support_role_ticket_db(self, guild_id: int, role_id: int, ticket_reference: str):
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         if role_id in ticket_support_roles:
             ticket_support_roles.remove(role_id)
         else:
@@ -386,15 +444,16 @@ class Ticket(commands.Cog):
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
-                             (str(ticket_support_roles), guild_id))
+                             (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
         return f'✅ Il ruolo <@&{role_id}> può gestire i ticket d\'ora in poi'
 
-    async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int):
+    async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int,
+                           ticket_reference):
         # ASK FOR REFERENCE
-        ticket_reference = await self.return_ticket_reference(guild_id=guild_id,
-                                                              name_of_table='ticket_reaction_lock_ids',
-                                                              element=channel_id)
+        # ticket_reference = await self.return_ticket_reference(guild_id=guild_id,
+        #                                                       name_of_table='ticket_reaction_lock_ids',
+        #                                                       element=channel_id)
 
         # LOADING OFFLINE DATABASE
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id'][ticket_reference]
@@ -406,6 +465,8 @@ class Ticket(commands.Cog):
         # CLOSE TICKET CHANNEL
         guild = self.bot.get_guild(guild_id)
         channel = self.bot.get_channel(channel_id)
+        await channel.send(embed=discord.Embed(title='Chiusura ticket in 5 secondi...', colour=discord.Colour.red()))
+        await asyncio.sleep(5)
         await channel.delete()
 
         # SEND LOG CHANNEL INFO
@@ -413,7 +474,7 @@ class Ticket(commands.Cog):
 
         open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][ticket_reference][message_id])
         closer_user_obj = self.bot.get_user(closer_user_id)
-        embed = discord.Embed(title="Ticket Chiuso", description='', olour=discord.Colour.green())
+        embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
         embed.add_field(name='Il', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
