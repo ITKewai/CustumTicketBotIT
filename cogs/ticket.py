@@ -22,6 +22,7 @@ class Ticket(commands.Cog):
         self.db_ready = False
         self.db_offline = {}
         self.antispam_lock = []
+        self.n = '\n'
         print(self.db_ready)
 
     async def ready_db(self):
@@ -33,10 +34,6 @@ class Ticket(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         await self.first_scan_db()
-
-    x = {'message_id': {
-        'DEFAULT': 00000000,
-        'not_default': 000000}}
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
@@ -92,7 +89,8 @@ class Ticket(commands.Cog):
                                             role in [role.id for role in raw_payload.member.roles]))
 
                             #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
-                            if (not any(role for role in ticket_support if role in [role.id for role in payload.member.roles])) and payload.user_id != ticket_owner:
+                            if (not any(role for role in ticket_support if role in [role.id for role in
+                                                                                    payload.member.roles])) and payload.user_id != ticket_owner:
                                 return
                             await message.add_reaction('❌')
                             await message.add_reaction('✅')
@@ -123,16 +121,96 @@ class Ticket(commands.Cog):
                     import sys
                     sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
 
-    @commands.command()
-    async def setup(self, ctx):
-        await self.ready_db()
-        await ctx.send(await self.first_ticket_setup(guild=ctx.guild))
+    @commands.group(description='GRUPPO COMANDI TICKET', invoke_without_command=True)
+    async def ticket(self, ctx):
+        await ctx.send("```diff\n-BLA BLA INFOMAZIONI\n+ bla \n- blabla altre informazioni\n+ informazioni utili```")
 
-    @commands.command(aliases=['addsupport'], description='SUDO', pass_context=True, hidden=True)
-    async def add_support(self, ctx, role: discord.Role, ticket_reference='DEFAULT'):
+    @ticket.command(name='setup', description='cancella fino all ID del messaggio fornito')
+    async def setup_subcommand(self, ctx):
         await self.ready_db()
+        await ctx.send(await self.first_ticket_setup(ctx=ctx))
+
+    @ticket.command(name='addsupport', description='Aggiunge un ruolo come support dei ticket futuri')
+    async def add_support_subcommand(self, ctx):
+        await self.ready_db()
+        offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
+        msg = await ctx.send(embed=discord.Embed(title='COMANDO: addsupport',
+                                                 description='Menziona il ruolo che potrà interagire con i ticket',
+                                                 colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per '
+                                                                                                'rispondere '
+                                                                                                'correttamente'))
+
+        # TODO: AGGIUNGERE FOOTER CHE DICE CHE SI HANNO 40 SECONDI PER RISPONDERE CORRETTAMENTE
+
+        def check_role(m):
+            return m.author.id == ctx.author.id and m.role_mentions
+
+        def check_reference(m):
+            return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
+
+        try:
+            _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
+            role = _role.role_mentions[0]
+            await _role.delete()
+        except asyncio.TimeoutError:
+            return await msg.delete()
+
+        embed = msg.embeds[0]
+        n = '\n'
+        embed.description = f"A quale pannello vuoi aggiungere il ruolo {role.mention} come support?\n\n " \
+                            f"PANNELLI DISPONIBILI:\n```fix\n{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
+
+        await msg.edit(embed=embed)
+
+        try:
+            _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
+            ticket_reference = _reference.content.upper()
+        except asyncio.TimeoutError:
+            return await msg.delete()
+
         await ctx.send(
             await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+
+    @ticket.command(name='removesupport', description='Rimuove un ruolo come support dei ticket futuri')
+    async def remove_support_subcommand(self, ctx):
+        await self.ready_db()
+        offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
+        msg = await ctx.send(embed=discord.Embed(title='COMANDO: removesupport',
+                                                 description='Menziona il ruolo che non vuoi possa interagire con '
+                                                             'i ticket futuri',
+                                                 colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per '
+                                                                                                'rispondere '
+                                                                                                'correttamente'))
+
+        # TODO: AGGIUNGERE FOOTER CHE DICE CHE SI HANNO 40 SECONDI PER RISPONDERE CORRETTAMENTE
+
+        def check_role(m):
+            return m.author.id == ctx.author.id and m.role_mentions
+
+        def check_reference(m):
+            return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
+
+        try:
+            _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
+            role = _role.role_mentions[0]
+            await _role.delete()
+        except asyncio.TimeoutError:
+            return await msg.delete()
+
+        embed = msg.embeds[0]
+        embed.description = f"A quale pannello vuoi rimuovere il ruolo {role.mention} come support?\n\n " \
+                            f"PANNELLI DISPONIBILI:\n```fix\n{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
+
+        await msg.edit(embed=embed)
+
+        try:
+            _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
+            ticket_reference = _reference.content.upper()
+        except asyncio.TimeoutError:
+            return await msg.delete()
+
+        await ctx.send(
+            await self.remove_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
 
     @commands.command()
     @commands.is_owner()
@@ -141,12 +219,6 @@ class Ticket(commands.Cog):
         for channel in ctx.guild.channels:
             await channel.delete()
         await ctx.guild.create_text_channel(name='OWNED')
-
-    @commands.command(aliases=['pan'], description='SUDO', pass_context=True, hidden=True)
-    async def create_reaction_panel(self, ctx):
-        embed = discord.Embed(title="Apri un Ticket!", description='Clicca la letterina della posta 📩 sotto',
-                              colour=discord.Colour.green())
-        await ctx.send(embed=embed)
 
     @commands.command(aliases=['descriptionpan'], description='A', pass_context=True, hidden=True)
     async def edit_reaction_panel_description(self, ctx, message: discord.Message, *, text):
@@ -246,7 +318,7 @@ class Ticket(commands.Cog):
         disconn.close()
         print(self.db_ready)
 
-    async def first_ticket_setup(self, guild):
+    async def first_ticket_setup(self, ctx):
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -254,18 +326,56 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        exist = await cursor.execute("SELECT * FROM datacenter WHERE server_id = %s;", (guild.id,))
+        exist = await cursor.execute("SELECT * FROM datacenter WHERE server_id = %s;", (ctx.guild.id,))
         ticket_reference = 'DEFAULT'
         if exist == 1:
+            offline_ticket_ref = self.db_offline[ctx.guild.id]['ticket_reference']
+
+            await ctx.send(embed=discord.Embed(title='Come vuoi chiamare questo ulteriore pannello di ticket?',
+                                               description='La parola che invierai verrà salvata in maiuscolo,\n'
+                                                           '*PS: Se invierai una frase,'
+                                                           ' verrà contata comunque la prima parola*\n'
+                                                           'Nel caso la parola sia già esistente come pannello\n'
+                                                           'verrà ignorata e il bot attenderà una parola nuova.\n'
+                                                           'PANNELLI GIÀ UTILIZZATI: ```fix\n'
+                                                           f"{''.join(f'{x + self.n}' for x in offline_ticket_ref)}```",
+                                               colour=discord.Colour.orange()).set_footer(text='Hai in totale 60 '
+                                                                                               'secondi per scrivere '
+                                                                                               'una parola,\n '
+                                                                                               'sucessivamente il '
+                                                                                               'setup si chiuderà.'))
+
+            def check(m):
+                return m.author.id == ctx.author.id and len(m.content) > 1 and \
+                       not m.content.split(' ')[0].upper() in offline_ticket_ref
+
+            #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
+            try:
+                # _ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check)
+                ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check)
+                ticket_reference = ticket_reference.content.upper()
+            except asyncio.TimeoutError:
+                return
+
             # return await not_first_ticket_setup()
             # ticket_reference = 'DEFAULT' chiedi il nome che avrà il pannello
-            return '⚠ **️Il setup per questo server, è gia stato impostato una volta.** ⚠️\n\n' \
-                   'Se vuoi cancellare tutti i ticket e le impostazioni usa il comando **reset**'
-
-        category = await guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
-        channel = await guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category, reason=None)
-        channel_archive = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None, category=category,
+            # return '⚠ **️Il setup per questo server, è gia stato impostato una volta.** ⚠️\n\n' \
+            #        'Se vuoi cancellare tutti i ticket e le impostazioni usa il comando **reset**'
+        if exist != 1:
+            category = await ctx.guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
+            channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category,
                                                           reason=None)
+            channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None,
+                                                                  category=category,
+                                                                  reason=None)
+        else:
+            category = await ctx.guild.create_category(f'TICKET {ticket_reference}', overwrites=None,
+                                                       reason='Ticket bot', position=0)
+            channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category,
+                                                          reason=None)
+            channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None,
+                                                                  category=category,
+                                                                  reason=None)
 
         embed = discord.Embed(title="", colour=discord.Colour.green())
         ticket_set = {
@@ -276,38 +386,102 @@ class Ticket(commands.Cog):
         await message.add_reaction(emoji)
 
         # READY TO INJECT
-        _ticket_reference = [ticket_reference]
-        _category_id = {ticket_reference: category.id}
-        _channel_id = {ticket_reference: channel.id}
-        _ticket_set = ticket_set
-        _channel_archive = {ticket_reference: channel_archive.id}
-        _emoji = {ticket_reference: emoji}
-        _ticket_count = {ticket_reference: 0}
-        _message = {ticket_reference: message.id}
-        _ticket_settings = {
-            ticket_reference: 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'}
-        _ticket_reaction_lock_ids = {ticket_reference: {}}
-        _ticket_support_roles = {ticket_reference: []}
-        _ticket_owner_id = {ticket_reference: {}}
-        _ticket_closer_user_id = {ticket_reference: {}}
+        if exist != 1:
+            _ticket_reference = [ticket_reference]
+            _category_id = {ticket_reference: category.id}
+            _channel_id = {ticket_reference: channel.id}
+            _ticket_set = ticket_set
+            _channel_archive = {ticket_reference: channel_archive.id}
+            _emoji = {ticket_reference: emoji}
+            _ticket_count = {ticket_reference: 0}
+            _message = {ticket_reference: message.id}
+            _ticket_settings = {
+                ticket_reference: 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'}
+            _ticket_reaction_lock_ids = {ticket_reference: {}}
+            _ticket_support_roles = {ticket_reference: []}
+            _ticket_owner_id = {ticket_reference: {}}
+            _ticket_closer_user_id = {ticket_reference: {}}
 
-        try:
-            await cursor.execute("INSERT INTO datacenter (server_id, ticket_reference, ticket_general_category_id, "
-                                 "channel_id, message_id, open_reaction_emoji, message_settings, "
-                                 "ticket_general_log_channel, ticket_count, ticket_settings, ticket_reaction_lock_ids, "
-                                 "ticket_support_roles, ticket_owner_id, ticket_closer_user_id) "
-                                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                                 (guild.id, str(_ticket_reference), str(_category_id), str(_channel_id), str(_message),
-                                  str(_emoji), str(_ticket_set), str(_channel_archive), str(_ticket_count),
-                                  str(_ticket_settings), str(_ticket_reaction_lock_ids), str(_ticket_support_roles),
-                                  str(_ticket_owner_id), str(_ticket_closer_user_id)))
-            await self.load_db_var(only_guild=guild.id)
-            disconn.close()
-            return '**Creazione canali completate, TICKET abilitati**'
-        except Exception as error:
-            print(error)
-            disconn.close()
-            return '**Errore interno del database**'
+            try:
+                await cursor.execute("INSERT INTO datacenter (server_id, ticket_reference, ticket_general_category_id, "
+                                     "channel_id, message_id, open_reaction_emoji, message_settings, "
+                                     "ticket_general_log_channel, ticket_count, ticket_settings, "
+                                     "ticket_reaction_lock_ids, ticket_support_roles, ticket_owner_id, "
+                                     "ticket_closer_user_id) "
+                                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                                     (ctx.guild.id, str(_ticket_reference), str(_category_id), str(_channel_id),
+                                      str(_message),
+                                      str(_emoji), str(_ticket_set), str(_channel_archive), str(_ticket_count),
+                                      str(_ticket_settings), str(_ticket_reaction_lock_ids), str(_ticket_support_roles),
+                                      str(_ticket_owner_id), str(_ticket_closer_user_id)))
+                await self.load_db_var(only_guild=ctx.guild.id)
+                disconn.close()
+                return '**Creazione canali completate, TICKET abilitati**'
+            except Exception as error:
+                print(error)
+                disconn.close()
+                return '**Errore interno del database**'
+        else:
+            offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
+            offline_ticket_general_category_id = self.db_offline[ctx.guild.id]['ticket_general_category_id']
+            offline_channel_id = self.db_offline[ctx.guild.id]['channel_id']
+            offline_message_id = self.db_offline[ctx.guild.id]['message_id']
+            offline_open_reaction_emoji = self.db_offline[ctx.guild.id]['open_reaction_emoji']
+            offline_message_settings = self.db_offline[ctx.guild.id]['message_settings']
+            offline_ticket_general_log_channel = self.db_offline[ctx.guild.id]['ticket_general_log_channel']
+            offline_ticket_count = self.db_offline[ctx.guild.id]['ticket_count']
+            offline_ticket_settings = self.db_offline[ctx.guild.id]['ticket_settings']
+            offline_ticket_reaction_lock_ids = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids']
+            offline_ticket_support_roles = self.db_offline[ctx.guild.id]['ticket_support_roles']
+            offline_ticket_owner_id = self.db_offline[ctx.guild.id]['ticket_owner_id']
+            offline_ticket_closer_user_id = self.db_offline[ctx.guild.id]['ticket_closer_user_id']
+
+            # GOING READY, UPDATE OFFLINE DATABASE
+            offline_ticket_reference.append(ticket_reference)
+            offline_ticket_general_category_id[ticket_reference] = category.id
+            offline_channel_id[ticket_reference] = channel.id
+            offline_message_id[ticket_reference] = message.id
+            offline_open_reaction_emoji[ticket_reference] = emoji
+            offline_message_settings[ticket_reference] = ticket_set
+            offline_ticket_general_log_channel[ticket_reference] = channel_archive.id
+            offline_ticket_count[ticket_reference] = 0
+            offline_ticket_settings[
+                ticket_reference] = 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'
+            offline_ticket_reaction_lock_ids[ticket_reference] = {}
+            offline_ticket_support_roles[ticket_reference] = []
+            offline_ticket_owner_id[ticket_reference] = {}
+            offline_ticket_closer_user_id[ticket_reference] = {}
+
+            try:
+                await cursor.execute("UPDATE datacenter SET "
+                                     "ticket_reference = %s, ticket_general_category_id = %s, "
+                                     "channel_id = %s, message_id = %s, open_reaction_emoji = %s, "
+                                     "message_settings = %s, ticket_general_log_channel = %s, "
+                                     "ticket_count = %s, ticket_settings = %s, ticket_reaction_lock_ids = %s, "
+                                     "ticket_support_roles = %s, ticket_owner_id = %s, ticket_closer_user_id = %s "
+                                     "WHERE "
+                                     "server_id = %s;",
+                                     (str(offline_ticket_reference),
+                                      str(offline_ticket_general_category_id),
+                                      str(offline_channel_id),
+                                      str(offline_message_id),
+                                      str(offline_open_reaction_emoji),
+                                      str(offline_message_settings),
+                                      str(offline_ticket_general_log_channel),
+                                      str(offline_ticket_count),
+                                      str(offline_ticket_settings),
+                                      str(offline_ticket_reaction_lock_ids),
+                                      str(offline_ticket_support_roles),
+                                      str(offline_ticket_owner_id),
+                                      str(offline_ticket_closer_user_id),
+                                      ctx.guild.id))
+                await self.load_db_var(only_guild=ctx.guild.id)
+                disconn.close()
+                return '**Creazione ulteriori canali compleatto, TICKET aggiuntivi abilitati**'
+            except Exception as error:
+                print(error)
+                disconn.close()
+                return '**Errore interno del database**'
 
     async def delete_ticket_db(self, guild):  # TODO: capire a che minchia serve questa funzione se posso farlo offline
         disconn = await aiomysql.connect(host=host,
@@ -336,7 +510,7 @@ class Ticket(commands.Cog):
             if y == tick_message:
                 return z
 
-    async def return_ticket_support_roles_id(self, guild_id: int, ticket_reference):
+    async def return_ticket_support_roles_id(self, guild_id: int, ticket_reference: str):
         return self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
 
     async def create_ticket(self, guild_id: int, user_id: int, ticket_reference: str):
@@ -414,7 +588,7 @@ class Ticket(commands.Cog):
     async def add_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         if role_id in ticket_support_roles:
-            return f'⚠ ️Il ruolo <@&{role_id}> può già gestire i ticket'
+            return f'⚠ ️Il ruolo <@&{role_id}> ha già i permessi per geststire i ticket **{ticket_reference}** futuri'
         else:
             ticket_support_roles.append(role_id)
 
@@ -428,14 +602,14 @@ class Ticket(commands.Cog):
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
-        return f'✅ Il ruolo <@&{role_id}> ha i permessi i ticket d\'ora in poi'
+        return f'✅ Il ruolo <@&{role_id}> ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi'
 
-    async def remove_support_role_ticket_db(self, guild_id: int, role_id: int, ticket_reference: str):
+    async def remove_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         if role_id in ticket_support_roles:
             ticket_support_roles.remove(role_id)
         else:
-            return f'⚠ ️Il ruolo <@&{role_id}> non ha i permessi per gestire i ticket'
+            return f'⚠ ️Il ruolo <@&{role_id}> non ha ancora  i permessi per gestire i ticket **{ticket_reference}**'
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -446,7 +620,7 @@ class Ticket(commands.Cog):
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
-        return f'✅ Il ruolo <@&{role_id}> può gestire i ticket d\'ora in poi'
+        return f'✅ Il ruolo <@&{role_id}> non potrà gestire i ticket  **{ticket_reference}** d\'ora in poi'
 
     async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int,
                            ticket_reference):
@@ -499,10 +673,11 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
+        # TODO: FAI UNA FUNZIONE CHE TI DICE SE PUOI USARE I COMANDI TICKET
         # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
         # TODO: SPUNTE PER CONFERMA CHIUSURA TICKET
         # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA
-
+        # TODO: AGGIUNGERE PERMESSI PER COMANDI SETUP ECC
         # TODO: METTERE PIU PANNELLI
         # TODO: SETTARE RUOLI PER OGNI PANNELLO
         # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
