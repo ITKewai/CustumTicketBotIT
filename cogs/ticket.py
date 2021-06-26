@@ -128,89 +128,90 @@ class Ticket(commands.Cog):
     @ticket.command(name='setup', description='cancella fino all ID del messaggio fornito')
     async def setup_subcommand(self, ctx):
         await self.ready_db()
-        await ctx.send(await self.first_ticket_setup(ctx=ctx))
+        if await self.ticket_enabled(ctx.guild.id):
+            await ctx.send(await self.first_ticket_setup(ctx=ctx))
 
     @ticket.command(name='addsupport', description='Aggiunge un ruolo come support dei ticket futuri')
     async def add_support_subcommand(self, ctx):
         await self.ready_db()
-        offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
-        msg = await ctx.send(embed=discord.Embed(title='COMANDO: addsupport',
-                                                 description='Menziona il ruolo che potrà interagire con i ticket',
-                                                 colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per '
-                                                                                                'rispondere '
-                                                                                                'correttamente'))
+        if await self.ticket_enabled(ctx.guild.id):
+            offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
+            msg = await ctx.send(embed=discord.Embed(title='COMANDO: addsupport',
+                                                     description='Menziona il ruolo che potrà interagire con i ticket',
+                                                     colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per'
+                                                                                                    ' rispondere '
+                                                                                                    'correttamente'))
 
-        # TODO: AGGIUNGERE FOOTER CHE DICE CHE SI HANNO 40 SECONDI PER RISPONDERE CORRETTAMENTE
+            def check_role(m):
+                return m.author.id == ctx.author.id and m.role_mentions
 
-        def check_role(m):
-            return m.author.id == ctx.author.id and m.role_mentions
+            def check_reference(m):
+                return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
 
-        def check_reference(m):
-            return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
+            try:
+                _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
+                role = _role.role_mentions[0]
+                await _role.delete()
+            except asyncio.TimeoutError:
+                return await msg.delete()
 
-        try:
-            _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
-            role = _role.role_mentions[0]
-            await _role.delete()
-        except asyncio.TimeoutError:
-            return await msg.delete()
+            embed = msg.embeds[0]
+            n = '\n'
+            embed.description = f"A quale pannello vuoi aggiungere il ruolo {role.mention} come support?\n\n " \
+                                f"PANNELLI DISPONIBILI:\n```fix\n" \
+                                f"{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
 
-        embed = msg.embeds[0]
-        n = '\n'
-        embed.description = f"A quale pannello vuoi aggiungere il ruolo {role.mention} come support?\n\n " \
-                            f"PANNELLI DISPONIBILI:\n```fix\n{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
+            await msg.edit(embed=embed)
 
-        await msg.edit(embed=embed)
+            try:
+                _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
+                ticket_reference = _reference.content.upper()
+            except asyncio.TimeoutError:
+                return await msg.delete()
 
-        try:
-            _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
-            ticket_reference = _reference.content.upper()
-        except asyncio.TimeoutError:
-            return await msg.delete()
-
-        await ctx.send(
-            await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+            await ctx.send(
+                await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
 
     @ticket.command(name='removesupport', description='Rimuove un ruolo come support dei ticket futuri')
     async def remove_support_subcommand(self, ctx):
         await self.ready_db()
-        offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
-        msg = await ctx.send(embed=discord.Embed(title='COMANDO: removesupport',
-                                                 description='Menziona il ruolo che non vuoi possa interagire con '
-                                                             'i ticket futuri',
-                                                 colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per '
-                                                                                                'rispondere '
-                                                                                                'correttamente'))
+        if await self.ticket_enabled(ctx.guild.id):
+            offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
+            msg = await ctx.send(embed=discord.Embed(title='COMANDO: removesupport',
+                                                     description='Menziona il ruolo che non vuoi possa interagire con '
+                                                                 'i ticket futuri',
+                                                     colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per'
+                                                                                                    ' rispondere '
+                                                                                                    'correttamente'))
 
-        # TODO: AGGIUNGERE FOOTER CHE DICE CHE SI HANNO 40 SECONDI PER RISPONDERE CORRETTAMENTE
+            def check_role(m):
+                return m.author.id == ctx.author.id and m.role_mentions
 
-        def check_role(m):
-            return m.author.id == ctx.author.id and m.role_mentions
+            def check_reference(m):
+                return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
 
-        def check_reference(m):
-            return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
+            try:
+                _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
+                role = _role.role_mentions[0]
+                await _role.delete()
+            except asyncio.TimeoutError:
+                return await msg.delete()
 
-        try:
-            _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
-            role = _role.role_mentions[0]
-            await _role.delete()
-        except asyncio.TimeoutError:
-            return await msg.delete()
+            embed = msg.embeds[0]
+            embed.description = f"A quale pannello vuoi rimuovere il ruolo {role.mention} come support?\n\n " \
+                                f"PANNELLI DISPONIBILI:\n```fix\n" \
+                                f"{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
 
-        embed = msg.embeds[0]
-        embed.description = f"A quale pannello vuoi rimuovere il ruolo {role.mention} come support?\n\n " \
-                            f"PANNELLI DISPONIBILI:\n```fix\n{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
+            await msg.edit(embed=embed)
 
-        await msg.edit(embed=embed)
+            try:
+                _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
+                ticket_reference = _reference.content.upper()
+            except asyncio.TimeoutError:
+                return await msg.delete()
 
-        try:
-            _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
-            ticket_reference = _reference.content.upper()
-        except asyncio.TimeoutError:
-            return await msg.delete()
-
-        await ctx.send(
-            await self.remove_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+            await ctx.send(
+                await self.rem_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
 
     @commands.command()
     @commands.is_owner()
@@ -483,18 +484,13 @@ class Ticket(commands.Cog):
                 disconn.close()
                 return '**Errore interno del database**'
 
-    async def delete_ticket_db(self, guild):  # TODO: capire a che minchia serve questa funzione se posso farlo offline
-        disconn = await aiomysql.connect(host=host,
-                                         port=port,
-                                         user=user,
-                                         password=password,
-                                         db=db,
-                                         autocommit=True)
-        cursor = await disconn.cursor(aiomysql.DictCursor)
-        exist = await cursor.execute("SELECT * FROM datacenter WHERE server_id = %s;", (guild.id,))
-
-        if exist == 0:
-            return '⚠ **️Il setup per questo server, non è stato ancora impostato.** ⚠️'
+    async def ticket_enabled(self, guild_id: int):
+        await self.ready_db()
+        try:
+            foo = self.db_offline[guild_id]
+            return True
+        except KeyError:
+            return False
 
     async def return_ticket_reference(self, guild_id: int, name_of_table: str, element):
         try:
@@ -604,7 +600,7 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         return f'✅ Il ruolo <@&{role_id}> ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi'
 
-    async def remove_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
+    async def rem_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         if role_id in ticket_support_roles:
             ticket_support_roles.remove(role_id)
