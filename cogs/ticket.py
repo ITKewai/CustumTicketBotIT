@@ -137,8 +137,14 @@ class Ticket(commands.Cog):
                                 _payload = await self.bot.wait_for("raw_reaction_add", timeout=30.0, check=check)
 
                                 if str(_payload.emoji) == '✅':
-                                    await message.clear_reaction('❌')
-                                    await message.clear_reaction('✅')
+                                    try:
+                                        await message.clear_reaction('❌')
+                                    except:
+                                        pass
+                                    try:
+                                        await message.clear_reaction('✅')
+                                    except:
+                                        pass
                                     await self.close_ticket(guild_id=payload.guild_id,
                                                             channel_id=payload.channel_id,
                                                             closer_user_id=payload.user_id,
@@ -146,8 +152,14 @@ class Ticket(commands.Cog):
                                                             ticket_reference=ticket_reference)
 
                                 elif str(_payload.emoji) == '❌':
-                                    await message.clear_reaction('❌')
-                                    await message.clear_reaction('✅')
+                                    try:
+                                        await message.clear_reaction('❌')
+                                    except:
+                                        pass
+                                    try:
+                                        await message.clear_reaction('✅')
+                                    except:
+                                        pass
 
                             except asyncio.TimeoutError:
                                 print(asyncio.TimeoutError)
@@ -164,11 +176,13 @@ class Ticket(commands.Cog):
         await ctx.send("```diff\n-BLA BLA INFOMAZIONI\n+ bla \n- blabla altre informazioni\n+ informazioni utili```")
 
     @ticket.command(name='setup', description='cancella fino all ID del messaggio fornito')
+    @commands.has_permissions(manage_messages=True)
     async def setup_subcommand(self, ctx):
         await self.ready_db()
         await ctx.send(await self.first_ticket_setup(ctx=ctx))
 
     @ticket.command(name='addsupport', description='Aggiunge un ruolo come support dei ticket futuri')
+    @commands.has_permissions(manage_guild=True)
     async def add_support_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -208,8 +222,12 @@ class Ticket(commands.Cog):
 
             await ctx.send(
                 await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+        else:
+            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                                      description='```fix\nticket setup```', colour=discord.Colour.red()))
 
     @ticket.command(name='removesupport', description='Rimuove un ruolo come support dei ticket futuri')
+    @commands.has_permissions(manage_guild=True)
     async def remove_support_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -249,8 +267,12 @@ class Ticket(commands.Cog):
 
             await ctx.send(
                 await self.rem_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+        else:
+            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                                      description='```fix\nticket setup```', colour=discord.Colour.red()))
 
     @ticket.command(name='edit', description='Ti permette di modificare le impostazioni per i ticket')
+    @commands.has_permissions(manage_guild=True)
     async def edit_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -276,13 +298,14 @@ class Ticket(commands.Cog):
                 msg.embeds[0].description = f'**Cosa vorresti modificare nel pannello {ticket_reference}?**:\n' \
                                             '1️⃣= Formato del titolo dei ticket\n' \
                                             '2️⃣= Il pannello dove l\'utente apre il ticket\n' \
-                                            '3️⃣= Il pannello che esce quando apri un ticket'
+                                            '3️⃣= Il pannello che esce quando apri un ticket\n' \
+                                            '4️⃣ = Abilita/Disabilita ticket multipli dalla stessa persona'
                 msg.embeds[0].set_image(url='https://imgur.com/LmJSv6I.png')
                 msg.embeds[0].colour = discord.Colour.green()
 
                 await msg.edit(embed=msg.embeds[0])
 
-                emojis = ['1️⃣', '2️⃣', '3️⃣']
+                emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣']
 
                 for x in emojis:
                     await msg.add_reaction(x)
@@ -295,8 +318,6 @@ class Ticket(commands.Cog):
 
                 if str(_reaction.emoji) == '1️⃣':
                     # ENTRO NEL MENU MODIFICA TITOLO
-                    emojis.append('4️⃣')
-                    await msg.add_reaction('4️⃣')
                     msg.embeds[0].description = f"**MODIFICA TITOLO FUTURI TICKET**\n" \
                                                 f"In che formato vorresti forsse il titolo dei ticket?\n" \
                                                 f"1️⃣ = `ticket-176`\n" \
@@ -325,8 +346,6 @@ class Ticket(commands.Cog):
                         await self.set_preferred_title_format(guild_id=ctx.guild.id,
                                                               ticket_reference=ticket_reference,
                                                               preference='number_name_reference')
-
-                    # TODO : BUH FAI QUALCOSA CANCELLA COSE
 
                 elif str(_reaction.emoji) == '2️⃣':
                     # ENTRO NEL MENU MODIFICA PANNELLO PRE TICKET
@@ -361,10 +380,8 @@ class Ticket(commands.Cog):
                     await self.set_message_settings(guild_id=ctx.guild.id, ticket_reference=ticket_reference,
                                                     name=name, value=value)
                     await _value.delete()
-                    # TODO : BUH FAI QUALCOSA CANCELLA COSE
 
-                else:
-                    # set_ticket_settings
+                elif str(_reaction.emoji) == '3️⃣':
                     # ENTRO NEL MENU MODIFICA PANNELLO POST TICKET
                     await msg.clear_reactions()
 
@@ -386,12 +403,38 @@ class Ticket(commands.Cog):
 
                     await self.set_ticket_settings(guild_id=ctx.guild.id, ticket_reference=ticket_reference,
                                                    description=description)
-                    # TODO : BUH FAI QUALCOSA CANCELLA COSE
+
+                else:
+                    # ENTRO NEL MENU MODIFICA TICKET MULTIPLI
+                    await msg.clear_reactions()
+                    # ENTRO NEL MENU MODIFICA TITOLO
+                    msg.embeds[0].description = f"**ABILITA / DISATTIVA TICKET MULTIPLI**\n" \
+                                                f"Vuoi che un utente possa aprire più di un ticket nel pannello {translate_fronts(ticket_reference)}?\n"
+                    msg.embeds[0].set_image(url=discord.Embed.Empty)
+                    await msg.edit(embed=msg.embeds[0])
+                    await msg.add_reaction('✅')
+                    await msg.add_reaction('❌')
+                    emojis = ['✅', '❌']
+
+                    _reaction, _user = await self.bot.wait_for("reaction_add", timeout=60.0, check=check_choice)
+
+                    await msg.clear_reactions()
+
+                    if str(_reaction.emoji) == '✅':
+                        await self.set_ticket_multiple(guild_id=ctx.guild.id,
+                                                       ticket_reference=ticket_reference,
+                                                       preference=True)
+                    elif str(_reaction.emoji) == '❌':
+                        await self.set_ticket_multiple(guild_id=ctx.guild.id,
+                                                       ticket_reference=ticket_reference,
+                                                       preference=False)
                 await msg.delete()
                 await ctx.send('Impostazioni eseguite con successo.')
-
             except asyncio.TimeoutError:
                 return await msg.delete()
+        else:
+            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                                      description='```fix\nticket setup```', colour=discord.Colour.red()))
 
     @commands.command()
     @commands.is_owner()
@@ -400,18 +443,6 @@ class Ticket(commands.Cog):
         for channel in ctx.guild.channels:
             await channel.delete()
         await ctx.guild.create_text_channel(name='OWNED')
-
-    @commands.command(aliases=['descriptionpan'], description='A', pass_context=True, hidden=True)
-    async def edit_reaction_panel_description(self, ctx, message: discord.Message, *, text):
-        x = message
-        embed = x.embeds[0]
-        embed.description = text
-        await x.edit(embed=embed)
-        await ctx.message.add_reaction('📨')
-
-    @commands.command(aliases=['titleepan'], description='A', pass_context=True, hidden=True)
-    async def edit_reaction_panel_description(self, ctx, message: discord.Message, *, text):
-        x = message
 
     async def load_db_var(self, only_guild=None):
         disconn = await aiomysql.connect(host=host,
@@ -442,7 +473,8 @@ class Ticket(commands.Cog):
                                                         'ticket_owner_id': literal_eval(y['ticket_owner_id']),
                                                         'ticket_closer_user_id': literal_eval(
                                                             y['ticket_closer_user_id']),
-                                                        'ticket_title_mode': literal_eval(y['ticket_title_mode'])
+                                                        'ticket_title_mode': literal_eval(y['ticket_title_mode']),
+                                                        'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                         }
         else:
             await cursor.execute(f'SELECT * FROM datacenter WHERE server_id = {only_guild};')
@@ -463,7 +495,8 @@ class Ticket(commands.Cog):
                                                     'ticket_support_roles': literal_eval(y['ticket_support_roles']),
                                                     'ticket_owner_id': literal_eval(y['ticket_owner_id']),
                                                     'ticket_closer_user_id': literal_eval(y['ticket_closer_user_id']),
-                                                    'ticket_title_mode': literal_eval(y['ticket_title_mode'])
+                                                    'ticket_title_mode': literal_eval(y['ticket_title_mode']),
+                                                    'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                     }
         disconn.close()
 
@@ -492,7 +525,8 @@ class Ticket(commands.Cog):
                                  "ticket_support_roles text, "
                                  "ticket_owner_id text, "
                                  "ticket_closer_user_id text,"
-                                 "ticket_title_mode text);")
+                                 "ticket_title_mode text,"
+                                 "ticket_multiple text);")
         await self.load_db_var()
         self.db_ready = True
         disconn.close()
@@ -586,19 +620,21 @@ class Ticket(commands.Cog):
                                                      'number_name': False,
                                                      'number_name_reference': False
                                                      }}
+            _ticket_multiple = {ticket_reference: False}
 
             try:
                 await cursor.execute("INSERT INTO datacenter (server_id, ticket_reference, ticket_general_category_id, "
                                      "channel_id, message_id, open_reaction_emoji, message_settings, "
                                      "ticket_general_log_channel, ticket_count, ticket_settings, "
                                      "ticket_reaction_lock_ids, ticket_support_roles, ticket_owner_id, "
-                                     "ticket_closer_user_id, ticket_title_mode) "
-                                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                                     "ticket_closer_user_id, ticket_title_mode, ticket_multiple) "
+                                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                                      (ctx.guild.id, str(_ticket_reference), str(_category_id), str(_channel_id),
                                       str(_message),
                                       str(_emoji), str(_ticket_set), str(_channel_archive), str(_ticket_count),
                                       str(_ticket_settings), str(_ticket_reaction_lock_ids), str(_ticket_support_roles),
-                                      str(_ticket_owner_id), str(_ticket_closer_user_id), str(_ticket_title_mode)))
+                                      str(_ticket_owner_id), str(_ticket_closer_user_id), str(_ticket_title_mode),
+                                      str(_ticket_multiple)))
                 await self.load_db_var(only_guild=ctx.guild.id)
                 disconn.close()
                 return '**Creazione canali completate, TICKET abilitati**'
@@ -621,6 +657,7 @@ class Ticket(commands.Cog):
             offline_ticket_owner_id = self.db_offline[ctx.guild.id]['ticket_owner_id']
             offline_ticket_closer_user_id = self.db_offline[ctx.guild.id]['ticket_closer_user_id']
             offline_ticket_title_mode = self.db_offline[ctx.guild.id]['ticket_title_mode']
+            offline_ticket_multiple = self.db_offline[ctx.guild.id]['ticket_multiple']
 
             # GOING READY, UPDATE OFFLINE DATABASE
             offline_ticket_reference.append(ticket_reference)
@@ -642,6 +679,7 @@ class Ticket(commands.Cog):
                                                            'number_name': False,
                                                            'number_name_reference': False
                                                            }
+            offline_ticket_multiple[ticket_reference] = False
 
             try:
                 await cursor.execute("UPDATE datacenter SET "
@@ -650,7 +688,7 @@ class Ticket(commands.Cog):
                                      "message_settings = %s, ticket_general_log_channel = %s, "
                                      "ticket_count = %s, ticket_settings = %s, ticket_reaction_lock_ids = %s, "
                                      "ticket_support_roles = %s, ticket_owner_id = %s, ticket_closer_user_id = %s, "
-                                     "ticket_title_mode = %s "
+                                     "ticket_title_mode = %s, ticket_multiple = %s "
                                      "WHERE "
                                      "server_id = %s;",
                                      (str(offline_ticket_reference),
@@ -667,6 +705,7 @@ class Ticket(commands.Cog):
                                       str(offline_ticket_owner_id),
                                       str(offline_ticket_closer_user_id),
                                       str(offline_ticket_title_mode),
+                                      str(offline_ticket_multiple),
                                       ctx.guild.id))
                 await self.load_db_var(only_guild=ctx.guild.id)
                 disconn.close()
@@ -721,6 +760,20 @@ class Ticket(commands.Cog):
         cursor = await disconn.cursor(aiomysql.DictCursor)
         await cursor.execute(f'UPDATE datacenter SET ticket_title_mode = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_title_mode']), guild_id))
+        await self.load_db_var(guild_id)
+
+    async def set_ticket_multiple(self, guild_id: int, ticket_reference: str, preference: bool):
+        self.db_offline[guild_id]['ticket_multiple'][ticket_reference] = preference
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_multiple = %s WHERE server_id = %s;',
+                             (str(self.db_offline[guild_id]['ticket_multiple']), guild_id))
         await self.load_db_var(guild_id)
 
     def get_channel(self, channel_id: int):
@@ -783,13 +836,13 @@ class Ticket(commands.Cog):
 
         return True
 
-    async def return_ticket_title_format(self, guild_id: int, ticket_reference: str, ticket_number: int, name: str, ):
+    async def return_ticket_title_format(self, ticket_reference: str, ticket_number: int, name: str,
+                                         ticket_title_mode):
         _ticket_title_mode = {ticket_reference: {'ticket_number': True,
                                                  'ticket_name': False,
                                                  'number_name': False,
                                                  'number_name_reference': False
                                                  }}
-        ticket_title_mode = self.db_offline[guild_id]['ticket_title_mode'][ticket_reference]
 
         for k, v in ticket_title_mode.items():
             if v is True:
@@ -818,24 +871,28 @@ class Ticket(commands.Cog):
         ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference]
         ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id'][ticket_reference]
         ticket_title_mode = self.db_offline[guild_id]['ticket_title_mode'][ticket_reference]
+        ticket_multiple = self.db_offline[guild_id]['ticket_multiple'][ticket_reference]
+
         guild = self.bot.get_guild(guild_id)
         member = guild.get_member(user_id)
         # END
         # CHECK IF TICKET ALREADY EXIST
-        if user_id in ticket_owner_id.values():
-            # TRY TO MENTION USER IN HIS OWN TICKET
-            try:
-                # ticket_owner_id[message.id] = user_id
-                oof = [k for k, v in self.db_offline[guild_id]['ticket_owner_id'].items() if v == user_id]
-                if oof:
-                    channel = self.bot.get_channel(
-                        self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
-                    if channel:
-                        return await channel.send(member.mention +
-                                                  '```diff\n-Hai già un ticket aperto utilizza questo! ```')
+        if not ticket_multiple:
+            if user_id in ticket_owner_id.values():
+                # TRY TO MENTION USER IN HIS OWN TICKET
+                try:
+                    # ticket_owner_id[message.id] = user_id
+                    oof = [k for k, v in self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].items() if
+                           v == user_id]
+                    if oof:
+                        channel = self.bot.get_channel(
+                            self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
+                        if channel:
+                            return await channel.send(member.mention +
+                                                      '```diff\n-Hai già un ticket aperto utilizza questo! ```')
 
-            except:
-                return await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
+                except:
+                    return await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
 
         # END
 
@@ -850,8 +907,10 @@ class Ticket(commands.Cog):
                 if role_obj:
                     overwrites[role_obj] = discord.PermissionOverwrite(read_messages=True, send_messages=True, )
 
-        ticket_title = await self.return_ticket_title_format(guild_id=guild_id, ticket_reference=ticket_reference,
-                                                             ticket_number=ticket_count, name=member.name)
+        ticket_title = await self.return_ticket_title_format(ticket_reference=ticket_reference,
+                                                             ticket_number=ticket_count,
+                                                             name=member.name,
+                                                             ticket_title_mode=ticket_title_mode)
         channel = await guild.create_text_channel(ticket_title, overwrites=overwrites, category=category,
                                                   reason=None)
         embed = discord.Embed(title="", description=ticket_settings,
@@ -972,21 +1031,12 @@ class Ticket(commands.Cog):
         disconn.close()
 
     # TODO: AGGIUNGERE POSSIBLITA' DI POSTARE IL PANNELLO DI REAZIONE
-    # TODO: OPZIONE PER MODIFICARE TITOLO TICKET
-    # TODO: BLOCCARE TICKET MULTIPLI OPZIONE create_ticket
-    # TODO: FAI UNA FUNZIONE CHE TI DICE SE PUOI USARE I COMANDI TICKET
     # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
-    # TODO: SPUNTE PER CONFERMA CHIUSURA TICKET
-    # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA
-    # TODO: AGGIUNGERE PERMESSI PER COMANDI SETUP ECC
-    # TODO: METTERE PIU PANNELLI
-    # TODO: SETTARE RUOLI PER OGNI PANNELLO
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
-    # TODO: SOLO I RUOLI ADMIN POSSONO MODIFICARE I PANNELLI
-    # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user)
-    # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET
-    # TODO: OPZIONALE SE HA IN COMUNE PIU DI UN SERVER DISCORD CHIEDE IN QUALE APRIRE IL TICKET
-    # TODO: AGGIUNGERE IGNORARA SERVER NEI EVENT LISTENER
+    # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
+    # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
+    # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET meh...
+    # TODO: OPZIONALE SE HA IN COMUNE PIU DI UN SERVER DISCORD CHIEDE IN QUALE APRIRE IL TICKET meh...
 
 
 def setup(bot):
