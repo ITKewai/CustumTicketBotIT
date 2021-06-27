@@ -15,6 +15,44 @@ password = 'kokokoko1'
 db = 'TICKETS'
 
 
+def translate_fronts(_string):
+    dip = {
+        'A': '𝗔',
+        'B': '𝗕',
+        'C': '𝗖',
+        'D': '𝗗',
+        'E': '𝗘',
+        'F': '𝗙',
+        'G': '𝗚',
+        'H': '𝗛',
+        'I': '𝗜',
+        'L': '𝗟',
+        'M': '𝗠',
+        'N': '𝗡',
+        'O': '𝗢',
+        'P': '𝗣',
+        'Q': '𝗤',
+        'R': '𝗥',
+        'S': '𝗦',
+        'T': '𝗧',
+        'U': '𝗨',
+        'V': '𝗩',
+        'Z': '𝗭',
+        'X': '𝗫',
+        'Y': '𝗬',
+        'J': '𝗝',
+        'K': '𝗞',
+        'W': '𝗪',
+        'Ì': 'Ì',
+        'È': 'È',
+        'É': 'É',
+        'Ò': 'Ò',
+        'À': 'À',
+        'Ù': 'Ù',
+    }
+    return _string.translate(str.maketrans(dip))
+
+
 class Ticket(commands.Cog):
 
     def __init__(self, bot):
@@ -216,45 +254,144 @@ class Ticket(commands.Cog):
     async def edit_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
-            offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
+
+            offline_ticket_ref = self.db_offline[ctx.guild.id]['ticket_reference']
             msg = await ctx.send(embed=discord.Embed(title='COMANDO: edit',
-                                                     description='Menziona il ruolo che non vuoi possa interagire con '
-                                                                 'i ticket futuri',
-                                                     colour=discord.Colour.green()))
-
-            embed = discord.Embed(title='COMANDO: edit',
-                                  description='**Cosa vorresti modificare?**:\n1️⃣= Formato del titolo dei ticket\n'
-                                              '2️⃣= Il pannello dove l\'utente apre il ticket\n'
-                                              '3️⃣= Il pannello che esce quando apri un ticket',
-                                  colour=discord.Colour.blue())\
-                .set_image(url='https://imgur.com/LmJSv6I.png')\
-                .set_footer(text='Hai 60 secondi per rispondere correttamente')
-            await ctx.send(embed=embed)
-
-            emojis = ['1️⃣', '2️⃣', '3️⃣']
-            # await message.add_reaction('✅')
-            def check_choice(__reaction, __user):
-                return __user == ctx.author and str(__reaction.emoji) in emojis
-
+                                                     description='**Benvenuto nella modalita\' modifica,\n'
+                                                                 'A quale pannello vuoi apportare modifiche?**\n'
+                                                                 f'Pannelli disponibili:```fix\n'
+                                                                 f"{''.join(f'{x + self.n}' for x in offline_ticket_ref)}```",
+                                                     colour=discord.Colour.dark_grey())
+                                 .set_footer(text='Hai 60 secondi per rispondere correttamente'))
             try:
-                _reaction, _user = await self.bot.wait_for("message", timeout=60.0, check=check_choice)
+
+                def check_reference(m):
+                    return m.author.id == ctx.author.id and len(m.content) > 1 and \
+                           m.content.split(' ')[0].upper() in offline_ticket_ref
+
+                _ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check_reference)
+                ticket_reference = _ticket_reference.content.upper()
+                await _ticket_reference.delete()
+
+                msg.embeds[0].description = f'**Cosa vorresti modificare nel pannello {ticket_reference}?**:\n' \
+                                            '1️⃣= Formato del titolo dei ticket\n' \
+                                            '2️⃣= Il pannello dove l\'utente apre il ticket\n' \
+                                            '3️⃣= Il pannello che esce quando apri un ticket'
+                msg.embeds[0].set_image(url='https://imgur.com/LmJSv6I.png')
+                msg.embeds[0].colour = discord.Colour.green()
+
+                await msg.edit(embed=msg.embeds[0])
+
+                emojis = ['1️⃣', '2️⃣', '3️⃣']
+
+                for x in emojis:
+                    await msg.add_reaction(x)
+
+                def check_choice(__reaction, __user):
+                    return __user == ctx.author and str(__reaction.emoji) in emojis
+
+                _reaction, _user = await self.bot.wait_for("reaction_add", timeout=60.0, check=check_choice)
+                await msg.remove_reaction(_reaction, ctx.author)
 
                 if str(_reaction.emoji) == '1️⃣':
-                    pass
+                    # ENTRO NEL MENU MODIFICA TITOLO
+                    emojis.append('4️⃣')
+                    await msg.add_reaction('4️⃣')
+                    msg.embeds[0].description = f"**MODIFICA TITOLO FUTURI TICKET**\n" \
+                                                f"In che formato vorresti forsse il titolo dei ticket?\n" \
+                                                f"1️⃣ = `ticket-176`\n" \
+                                                f"2️⃣ = `ticket-aldo`\n" \
+                                                f"3️⃣ = `176-aldo`\n" \
+                                                f"4️⃣ = `176-aldo-{translate_fronts(ticket_reference)}`"
+                    msg.embeds[0].set_image(url=discord.Embed.Empty)
+                    await msg.edit(embed=msg.embeds[0])
+
+                    _reaction, _user = await self.bot.wait_for("reaction_add", timeout=60.0, check=check_choice)
+                    await msg.clear_reactions()
+
+                    if str(_reaction.emoji) == '1️⃣':
+                        await self.set_preferred_title_format(guild_id=ctx.guild.id,
+                                                              ticket_reference=ticket_reference,
+                                                              preference='ticket_number')
+                    elif str(_reaction.emoji) == '2️⃣':
+                        await self.set_preferred_title_format(guild_id=ctx.guild.id,
+                                                              ticket_reference=ticket_reference,
+                                                              preference='ticket_name')
+                    elif str(_reaction.emoji) == '3️⃣':
+                        await self.set_preferred_title_format(guild_id=ctx.guild.id,
+                                                              ticket_reference=ticket_reference,
+                                                              preference='number_name')
+                    else:
+                        await self.set_preferred_title_format(guild_id=ctx.guild.id,
+                                                              ticket_reference=ticket_reference,
+                                                              preference='number_name_reference')
+
+                    # TODO : BUH FAI QUALCOSA CANCELLA COSE
+
                 elif str(_reaction.emoji) == '2️⃣':
-                    pass
+                    # ENTRO NEL MENU MODIFICA PANNELLO PRE TICKET
+                    await msg.clear_reactions()
+
+                    msg.embeds[0].description = f"Scrivi la frase che vuoi come **TITOLO** del pannello \n " \
+                                                f"*(la frase che andrà al posto di \"Apri un Ticket!\")*"
+                    msg.embeds[0].set_image(url='https://imgur.com/MGu2zmN.png')
+                    await msg.edit(embed=msg.embeds[0])
+
+                    def check_name(m):
+                        return m.author == ctx.author and 256 > len(m.content) > 2
+
+                    _name = await self.bot.wait_for("message", timeout=60.0, check=check_name)
+                    name = _name.content
+                    await _name.delete()
+
+                    msg.embeds[0].description = f"Scrivi la frase che vuoi come **DESCRIZIONE** del pannello \n " \
+                                                f"*(la frase che andrà al posto di \"Clicca la letterina della posta " \
+                                                f":envelope_with_arrow: sotto)\" "
+
+                    msg.embeds[0].colour = discord.Colour.orange()
+
+                    await msg.edit(embed=msg.embeds[0])
+
+                    def check_value(m):
+                        return m.author == ctx.author and 1024 > len(m.content) > 2
+
+                    _value = await self.bot.wait_for("message", timeout=120.0, check=check_value)
+                    value = _value.content
+
+                    await self.set_message_settings(guild_id=ctx.guild.id, ticket_reference=ticket_reference,
+                                                    name=name, value=value)
+                    await _value.delete()
+                    # TODO : BUH FAI QUALCOSA CANCELLA COSE
+
                 else:
-                    pass
+                    # set_ticket_settings
+                    # ENTRO NEL MENU MODIFICA PANNELLO POST TICKET
+                    await msg.clear_reactions()
+
+                    msg.embeds[0].description = f"Scrivi la frase che vuoi come **contenuto** del pannello \n " \
+                                                f"*(la frase che andrà al posto di \"" \
+                                                f"Il supporto sarà con te a breve.\n " \
+                                                f"Per chiudere questo ticket reagisci con 🔒 sotto\")*"
+
+                    msg.embeds[0].set_image(url='https://imgur.com/a5ppSLr.png')
+
+                    await msg.edit(embed=msg.embeds[0])
+
+                    def check_description(m):
+                        return m.author == ctx.author and 2048 > len(m.content) > 2
+
+                    _description = await self.bot.wait_for("message", timeout=60.0, check=check_description)
+                    description = _description.content
+                    await _description.delete()
+
+                    await self.set_ticket_settings(guild_id=ctx.guild.id, ticket_reference=ticket_reference,
+                                                   description=description)
+                    # TODO : BUH FAI QUALCOSA CANCELLA COSE
+                await msg.delete()
+                await ctx.send('Impostazioni eseguite con successo.')
 
             except asyncio.TimeoutError:
                 return await msg.delete()
-
-            # embed = msg.embeds[0]
-            # embed.description = f"A quale pannello vuoi rimuovere il ruolo {role.mention} come support?\n\n " \
-            #                     f"PANNELLI DISPONIBILI:\n```fix\n" \
-            #                     f"{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
-            #
-            # await msg.edit(embed=embed)
 
     @commands.command()
     @commands.is_owner()
@@ -275,10 +412,6 @@ class Ticket(commands.Cog):
     @commands.command(aliases=['titleepan'], description='A', pass_context=True, hidden=True)
     async def edit_reaction_panel_description(self, ctx, message: discord.Message, *, text):
         x = message
-        embed = x.embeds[0]
-        embed.title = text
-        await x.edit(embed=embed)
-        await ctx.message.add_reaction('📨')
 
     async def load_db_var(self, only_guild=None):
         disconn = await aiomysql.connect(host=host,
@@ -569,7 +702,86 @@ class Ticket(commands.Cog):
         return self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
 
     async def set_preferred_title_format(self, guild_id: int, ticket_reference: str, preference: str):
-        ticket_title_mode = self.db_offline[guild_id]['ticket_title_mode'][ticket_reference]
+
+        _ticket_title_mode = {
+            'ticket_number': (True if preference == 'ticket_number' else False),
+            'ticket_name': (True if preference == 'ticket_name' else False),
+            'number_name': (True if preference == 'number_name' else False),
+            'number_name_reference': (True if preference == 'number_name_reference' else False)
+        }
+
+        self.db_offline[guild_id]['ticket_title_mode'][ticket_reference] = _ticket_title_mode
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_title_mode = %s WHERE server_id = %s;',
+                             (str(self.db_offline[guild_id]['ticket_title_mode']), guild_id))
+        await self.load_db_var(guild_id)
+
+    def get_channel(self, channel_id: int):
+        channel = self.bot.get_channel(channel_id)
+        if channel:
+            return channel
+        else:
+            # TODO: FEEDBACK PANNELLI ELIMINATI CANALI CATEGORIE ECC
+            pass
+
+    async def fetch_message(self, channel: discord.TextChannel, message_id: int):
+        try:
+            message = await channel.fetch_message(message_id)
+            return message
+        except:
+            # TODO: FEEDBACK PANNELLI ELIMINATI CANALI CATEGORIE ECC
+            pass
+
+    async def set_message_settings(self, guild_id: int, ticket_reference: str, name: str, value: str):
+        _message_settings = {'name': name, 'value': value}
+
+        self.db_offline[guild_id]['message_settings'][ticket_reference] = _message_settings
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET message_settings = %s WHERE server_id = %s;',
+                             (str(self.db_offline[guild_id]['message_settings']), guild_id))
+        await self.load_db_var(guild_id)
+
+        channel = self.get_channel(channel_id=self.db_offline[guild_id]['channel_id'][ticket_reference])
+        if channel:
+            message = await self.fetch_message(channel=channel,
+                                               message_id=self.db_offline[guild_id]['message_id'][ticket_reference])
+            message.embeds[0].set_field_at(0, name=name, value=value)
+            # message.embeds[0].title = name
+            # message.embeds[0].description = value
+            await message.edit(embed=message.embeds[0])
+            return True
+        else:
+            return False
+
+    async def set_ticket_settings(self, guild_id: int, ticket_reference: str, description: str):
+        self.db_offline[guild_id]['ticket_settings'][ticket_reference] = description
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+        await cursor.execute(f'UPDATE datacenter SET ticket_settings = %s WHERE server_id = %s;',
+                             (str(self.db_offline[guild_id]['ticket_settings']), guild_id))
+        await self.load_db_var(guild_id)
+
+        return True
 
     async def return_ticket_title_format(self, guild_id: int, ticket_reference: str, ticket_number: int, name: str, ):
         _ticket_title_mode = {ticket_reference: {'ticket_number': True,
@@ -594,7 +806,7 @@ class Ticket(commands.Cog):
         elif title_type == 'number_name':
             return f"{ticket_number}-{name}"
         elif title_type == 'number_name_reference':
-            return f"{ticket_number}-{name}-{reference}"
+            return f"{ticket_number}-{name}-{translate_fronts(reference)}"
 
     async def create_ticket(self, guild_id: int, user_id: int, ticket_reference: str):
         # LOADING OFFLINE DATABASE
@@ -759,8 +971,9 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
+    # TODO: AGGIUNGERE POSSIBLITA' DI POSTARE IL PANNELLO DI REAZIONE
     # TODO: OPZIONE PER MODIFICARE TITOLO TICKET
-    # TODO: BLOCCARE TICKET MULTIPLI OPZIONE
+    # TODO: BLOCCARE TICKET MULTIPLI OPZIONE create_ticket
     # TODO: FAI UNA FUNZIONE CHE TI DICE SE PUOI USARE I COMANDI TICKET
     # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
     # TODO: SPUNTE PER CONFERMA CHIUSURA TICKET
