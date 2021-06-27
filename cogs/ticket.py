@@ -188,8 +188,8 @@ class Ticket(commands.Cog):
         if await self.ticket_enabled(ctx.guild.id):
             offline_ticket_reference = self.db_offline[ctx.guild.id]['ticket_reference']
             msg = await ctx.send(embed=discord.Embed(title='COMANDO: addsupport',
-                                                     description='Menziona il ruolo che potrà interagire con i ticket',
-                                                     colour=discord.Colour.green()).set_footer(text='Hai 40 secondi per'
+                                                     description='Menziona i ruoli che potranno interagire con i ticket',
+                                                     colour=discord.Colour.green()).set_footer(text='Hai 60 secondi per'
                                                                                                     ' rispondere '
                                                                                                     'correttamente'))
 
@@ -200,15 +200,18 @@ class Ticket(commands.Cog):
                 return m.author.id == ctx.author.id and m.content.upper() in offline_ticket_reference
 
             try:
-                _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
-                role = _role.role_mentions[0]
+                _role = await self.bot.wait_for("message", timeout=60.0, check=check_role)
+                role = _role.role_mentions
                 await _role.delete()
             except asyncio.TimeoutError:
                 return await msg.delete()
 
             embed = msg.embeds[0]
             n = '\n'
-            embed.description = f"A quale pannello vuoi aggiungere il ruolo {role.mention} come support?\n\n " \
+            embed.description = f"A quale pannello vuoi aggiungere " \
+                                f"{'il ruolo ' if len(role) == 1 else 'i ruoli '}" \
+                                f"{' '.join([x.mention for x in role])}" \
+                                f"come support?\n\n " \
                                 f"PANNELLI DISPONIBILI:\n```fix\n" \
                                 f"{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
 
@@ -221,7 +224,7 @@ class Ticket(commands.Cog):
                 return await msg.delete()
 
             await ctx.send(
-                await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+                await self.add_support_role(guild_id=ctx.guild.id, roles=role, ticket_reference=ticket_reference))
         else:
             return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
                                                       description='```fix\nticket setup```',
@@ -254,9 +257,12 @@ class Ticket(commands.Cog):
                 return await msg.delete()
 
             embed = msg.embeds[0]
-            embed.description = f"A quale pannello vuoi rimuovere il ruolo {role.mention} come support?\n\n " \
+            embed.description = f"A quale pannello vuoi rimuovere " \
+                                f"{'il ruolo ' if len(role) == 1 else 'i ruoli '}" \
+                                f"{' '.join([x.mention for x in role])}" \
+                                f"come support?\n\n " \
                                 f"PANNELLI DISPONIBILI:\n```fix\n" \
-                                f"{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
+                                f"{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
 
             await msg.edit(embed=embed)
 
@@ -267,7 +273,7 @@ class Ticket(commands.Cog):
                 return await msg.delete()
 
             await ctx.send(
-                await self.rem_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
+                await self.rem_support_role(guild_id=ctx.guild.id, roles=role, ticket_reference=ticket_reference))
         else:
             return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
                                                       description='```fix\nticket setup```',
@@ -1028,13 +1034,7 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
-    async def add_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
-        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
-        if role_id in ticket_support_roles:
-            return f'⚠ ️Il ruolo <@&{role_id}> ha già i permessi per geststire i ticket **{ticket_reference}** futuri'
-        else:
-            ticket_support_roles.append(role_id)
-
+    async def add_support_role(self, guild_id: int, roles, ticket_reference: str):
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -1042,17 +1042,21 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
+
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
+        foo = ''
+        for role in roles:
+            if role.id in ticket_support_roles:
+                foo += f'⚠ ️Il ruolo {role.mention} ha già i permessi per geststire i ticket **{ticket_reference}** futuri\n'
+            else:
+                ticket_support_roles.append(role.id)
+                foo += f'✅ Il ruolo {role.mention} ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi\n'
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
-        return f'✅ Il ruolo <@&{role_id}> ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi'
+        return foo
 
-    async def rem_support_role(self, guild_id: int, role_id: int, ticket_reference: str):
-        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
-        if role_id in ticket_support_roles:
-            ticket_support_roles.remove(role_id)
-        else:
-            return f'⚠ ️Il ruolo <@&{role_id}> non ha ancora  i permessi per gestire i ticket **{ticket_reference}**'
+    async def rem_support_role(self, guild_id: int, roles, ticket_reference: str):
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -1060,10 +1064,19 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
+
+        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
+        foo = ''
+        for role in roles:
+            if role.id in ticket_support_roles:
+                ticket_support_roles.remove(role.id)
+                foo += f'✅ Il ruolo {role.mention} non potrà gestire i ticket  **{ticket_reference}** d\'ora in poi'
+            else:
+                foo += f'⚠ ️Il ruolo {role.mention} non ha ancora  i permessi per gestire i ticket **{ticket_reference}**'
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
-        return f'✅ Il ruolo <@&{role_id}> non potrà gestire i ticket  **{ticket_reference}** d\'ora in poi'
+        return foo
 
     async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int,
                            ticket_reference):
@@ -1134,7 +1147,6 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
-    # TODO: PIU' MENZIONI RUOLO PER RIMUOVERE O AGGIUNGERE SUPPORT ROLE, (IGNORAS E ESISTE GIA)
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
