@@ -224,7 +224,8 @@ class Ticket(commands.Cog):
                 await self.add_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
         else:
             return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```', colour=discord.Colour.red()))
+                                                      description='```fix\nticket setup```',
+                                                      colour=discord.Colour.red()))
 
     @ticket.command(name='removesupport', description='Rimuove un ruolo come support dei ticket futuri')
     @commands.has_permissions(manage_guild=True)
@@ -269,7 +270,8 @@ class Ticket(commands.Cog):
                 await self.rem_support_role(guild_id=ctx.guild.id, role_id=role.id, ticket_reference=ticket_reference))
         else:
             return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```', colour=discord.Colour.red()))
+                                                      description='```fix\nticket setup```',
+                                                      colour=discord.Colour.red()))
 
     @ticket.command(name='edit', description='Ti permette di modificare le impostazioni per i ticket')
     @commands.has_permissions(manage_guild=True)
@@ -434,7 +436,8 @@ class Ticket(commands.Cog):
                 return await msg.delete()
         else:
             return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```', colour=discord.Colour.red()))
+                                                      description='```fix\nticket setup```',
+                                                      colour=discord.Colour.red()))
 
     @commands.command()
     @commands.is_owner()
@@ -666,7 +669,7 @@ class Ticket(commands.Cog):
             offline_message_id[ticket_reference] = message.id
             offline_open_reaction_emoji[ticket_reference] = emoji
             offline_message_settings[ticket_reference] = ticket_set
-            offline_ticket_general_log_channel[ticket_reference] = channel_archive.id
+            [ticket_reference] = channel_archive.id
             offline_ticket_count[ticket_reference] = 0
             offline_ticket_settings[
                 ticket_reference] = 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'
@@ -1003,6 +1006,24 @@ class Ticket(commands.Cog):
         # SEND LOG CHANNEL INFO
         channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
 
+        if not channel:
+            disconn = await aiomysql.connect(host=host,
+                                             port=port,
+                                             user=user,
+                                             password=password,
+                                             db=db,
+                                             autocommit=True)
+            cursor = await disconn.cursor(aiomysql.DictCursor)
+            channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None,
+                                                      category=category,
+                                                      reason=None)
+            offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
+
+            offline_ticket_general_log_channel[ticket_reference] = channel.id
+            await cursor.execute("UPDATE datacenter SET ticket_general_log_channel = %s WHERE server_id = %s;",
+                                 (str(offline_ticket_general_log_channel), guild.id))
+            disconn.close()
+
         open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][ticket_reference][message_id])
         closer_user_obj = self.bot.get_user(closer_user_id)
         embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
@@ -1014,7 +1035,6 @@ class Ticket(commands.Cog):
         # UPDATE OFFLINE DB
         self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].pop(message_id)
         self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].pop(message_id)
-
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -1022,6 +1042,7 @@ class Ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
+
         await cursor.execute(f'UPDATE datacenter SET ticket_reaction_lock_ids = %s, '
                              f'ticket_owner_id = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
