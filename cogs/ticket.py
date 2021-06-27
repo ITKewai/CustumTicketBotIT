@@ -439,6 +439,51 @@ class Ticket(commands.Cog):
                                                       description='```fix\nticket setup```',
                                                       colour=discord.Colour.red()))
 
+    @ticket.command(name='movepanel', description='Ti permette di spostare il pannello di reazione per i ticket')
+    @commands.has_permissions(manage_guild=True)
+    async def move_panel_subcommand(self, ctx):
+        await self.ready_db()
+        if await self.ticket_enabled(ctx.guild.id):
+            offline_ticket_ref = self.db_offline[ctx.guild.id]['ticket_reference']
+            msg = await ctx.send(embed=discord.Embed(title='COMANDO: movepanel',
+                                                     description='**Benvenuto nella modalita\' movepanel,\n'
+                                                                 'Quale pannello vuoi spostare di canale?**\n'
+                                                                 f'Pannelli disponibili:```fix\n'
+                                                                 f"{''.join(f'{x + self.n}' for x in offline_ticket_ref)}```",
+                                                     colour=discord.Colour.dark_grey())
+                                 .set_footer(text='Hai 60 secondi per rispondere correttamente'))
+            try:
+                def check_reference(m):
+                    return m.author.id == ctx.author.id and len(m.content) > 1 and \
+                           m.content.split(' ')[0].upper() in offline_ticket_ref
+
+                _ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check_reference)
+                ticket_reference = _ticket_reference.content.upper()
+                await _ticket_reference.delete()
+
+                msg.embeds[0].description = f'**Menziona il canale dove vuoi spostare il pannello {ticket_reference}**'
+                msg.embeds[0].colour = discord.Colour.orange()
+                await msg.edit(embed=msg.embeds[0])
+
+                def check_channel(m):
+                    return m.author.id == ctx.author.id and m.channel_mentions
+
+                _channel = await self.bot.wait_for("message", timeout=60.0, check=check_channel)
+                channel = _channel.channel_mentions[0]
+                await _channel.delete()
+                await self.move_ticket_message_settings(guild_id=ctx.guild.id,
+                                                        ticket_reference=ticket_reference,
+                                                        channel_destination=channel)
+                await msg.delete()
+                await ctx.send('Impostazioni eseguite con successo.')
+
+            except asyncio.TimeoutError:
+                return await msg.delete()
+        else:
+            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                                      description='```fix\nticket setup```',
+                                                      colour=discord.Colour.red()))
+
     @commands.command()
     @commands.is_owner()
     async def delete(self, ctx):
@@ -668,8 +713,9 @@ class Ticket(commands.Cog):
             offline_channel_id[ticket_reference] = channel.id
             offline_message_id[ticket_reference] = message.id
             offline_open_reaction_emoji[ticket_reference] = emoji
-            offline_message_settings[ticket_reference] = ticket_set
-            [ticket_reference] = channel_archive.id
+            offline_message_settings[ticket_reference] = {'name': 'Apri un Ticket!',
+                                                          'value': 'Clicca la letterina della posta 📩 sotto '}
+            offline_ticket_general_log_channel[ticket_reference] = channel_archive.id
             offline_ticket_count[ticket_reference] = 0
             offline_ticket_settings[
                 ticket_reference] = 'Il supporto sarà con te a breve.\n Per chiudere questo ticket reagisci con 🔒 sotto'
@@ -779,7 +825,7 @@ class Ticket(commands.Cog):
                              (str(self.db_offline[guild_id]['ticket_multiple']), guild_id))
         await self.load_db_var(guild_id)
 
-    def get_channel(self, channel_id: int):
+    async def get_channel(self, channel_id: int):
         channel = self.bot.get_channel(channel_id)
         if channel:
             return channel
@@ -811,7 +857,7 @@ class Ticket(commands.Cog):
                              (str(self.db_offline[guild_id]['message_settings']), guild_id))
         await self.load_db_var(guild_id)
 
-        channel = self.get_channel(channel_id=self.db_offline[guild_id]['channel_id'][ticket_reference])
+        channel = await self.get_channel(channel_id=self.db_offline[guild_id]['channel_id'][ticket_reference])
         if channel:
             message = await self.fetch_message(channel=channel,
                                                message_id=self.db_offline[guild_id]['message_id'][ticket_reference])
@@ -838,6 +884,43 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
 
         return True
+
+    async def move_ticket_message_settings(self, guild_id: int, ticket_reference: str,
+                                           channel_destination: discord.TextChannel):
+        channel_id = self.db_offline[guild_id]['channel_id'][ticket_reference]
+        message_id = self.db_offline[guild_id]['message_id'][ticket_reference]
+        open_reaction_emoji = self.db_offline[guild_id]['open_reaction_emoji'][ticket_reference]
+
+        channel = await self.get_channel(channel_id)
+        if channel:
+            message = await self.fetch_message(channel=channel, message_id=message_id)
+            if message:
+                await message.delete()
+
+        offline_channel_id = self.db_offline[guild_id]['channel_id']
+        offline_message_id = self.db_offline[guild_id]['message_id']
+        offline_message_settings = self.db_offline[guild_id]['message_settings']
+
+        embed = discord.Embed(title="", colour=discord.Colour.green())
+        embed.add_field(name=offline_message_settings[ticket_reference]['name'],
+                        value=offline_message_settings[ticket_reference]['value'])
+        message = await channel_destination.send(embed=embed)
+        await message.add_reaction(open_reaction_emoji)
+
+        # GOING READY, UPDATE OFFLINE DATABASE
+        offline_channel_id[ticket_reference] = channel_destination.id
+        offline_message_id[ticket_reference] = message.id
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+
+        await cursor.execute("UPDATE datacenter SET channel_id = %s, message_id = %s WHERE server_id = %s;",
+                             (str(offline_channel_id), str(offline_message_id), guild_id))
+        await self.load_db_var(only_guild=guild_id)
 
     async def return_ticket_title_format(self, ticket_reference: str, ticket_number: int, name: str,
                                          ticket_title_mode):
@@ -1051,9 +1134,7 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
-    # TODO: RECREATE LOG_CHANNEL IF DELETED, RECREATE TICKET_GENERATOR
     # TODO: PIU' MENZIONI RUOLO PER RIMUOVERE O AGGIUNGERE SUPPORT ROLE, (IGNORAS E ESISTE GIA)
-    # TODO: AGGIUNGERE POSSIBLITA' DI POSTARE IL PANNELLO DI REAZIONE
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
