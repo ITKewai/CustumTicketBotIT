@@ -1051,6 +1051,7 @@ class Ticket(commands.Cog):
             else:
                 ticket_support_roles.append(role.id)
                 foo += f'✅ Il ruolo {role.mention} ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi\n'
+
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
@@ -1073,6 +1074,7 @@ class Ticket(commands.Cog):
                 foo += f'✅ Il ruolo {role.mention} non potrà gestire i ticket  **{ticket_reference}** d\'ora in poi'
             else:
                 foo += f'⚠ ️Il ruolo {role.mention} non ha ancora  i permessi per gestire i ticket **{ticket_reference}**'
+
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.load_db_var(guild_id)
