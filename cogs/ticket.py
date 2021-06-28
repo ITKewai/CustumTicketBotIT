@@ -3,16 +3,21 @@ import datetime
 import json
 import traceback
 from ast import literal_eval
-
+try:
+    from data.config import *
+    is_ciro_bot = True
+except:
+    is_ciro_bot = False
+    print(is_ciro_bot)
 import discord
 import aiomysql
 from discord.ext import commands, tasks
 
-host = '192.168.1.123'
-port = 3306
-user = 'kewai'
-password = 'kokokoko1'
-db = 'TICKETS'
+host = '192.168.1.123' if not is_ciro_bot else db_new_host
+port = 3306 if not is_ciro_bot else db_new_port
+user = 'kewai'if not is_ciro_bot else db_new_user
+password = 'kokokoko1' if not is_ciro_bot else db_new_pass
+db = 'TICKETS' if not is_ciro_bot else db_new_name
 
 
 def translate_fronts(_string):
@@ -504,7 +509,7 @@ class ticket(commands.Cog):
         await self.ready_db()
         for channel in ctx.guild.channels:
             await channel.delete()
-        await ctx.guild.create_text_channel(name='OWNED')
+        await ctx.guild.create_text_channel(name='TEST_SERVER')
 
     async def load_db_var(self, only_guild=None):
         disconn = await aiomysql.connect(host=host,
@@ -515,7 +520,7 @@ class ticket(commands.Cog):
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
         if not only_guild:
-            await cursor.execute('SELECT * FROM datacenter;')
+            await cursor.execute('SELECT * FROM tickets_config;')
             x = await cursor.fetchall()
             for y in x:
                 self.db_offline[int(y['server_id'])] = {'ticket_reference': literal_eval(y['ticket_reference']),
@@ -539,7 +544,7 @@ class ticket(commands.Cog):
                                                         'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                         }
         else:
-            await cursor.execute(f'SELECT * FROM datacenter WHERE server_id = {only_guild};')
+            await cursor.execute(f'SELECT * FROM tickets_config WHERE server_id = {only_guild};')
             y = await cursor.fetchone()
             self.db_offline[int(y['server_id'])] = {'ticket_reference': literal_eval(y['ticket_reference']),
                                                     'ticket_general_category_id': literal_eval(
@@ -571,9 +576,9 @@ class ticket(commands.Cog):
                                          autocommit=True)
 
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        x = await cursor.execute("SHOW tables like 'datacenter'")
+        x = await cursor.execute("SHOW tables like 'tickets_config'")
         if x == 0:
-            await cursor.execute("CREATE TABLE datacenter (server_id varchar(20), "
+            await cursor.execute("CREATE TABLE tickets_config (server_id varchar(20), "
                                  "ticket_reference text, "
                                  "ticket_general_category_id text, "
                                  "channel_id text, "
@@ -601,7 +606,7 @@ class ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        exist = await cursor.execute("SELECT * FROM datacenter WHERE server_id = %s;", (ctx.guild.id,))
+        exist = await cursor.execute("SELECT * FROM tickets_config WHERE server_id = %s;", (ctx.guild.id,))
         ticket_reference = 'DEFAULT'
         if exist == 1:
             offline_ticket_ref = self.db_offline[ctx.guild.id]['ticket_reference']
@@ -686,7 +691,7 @@ class ticket(commands.Cog):
             _ticket_multiple = {ticket_reference: False}
 
             try:
-                await cursor.execute("INSERT INTO datacenter (server_id, ticket_reference, ticket_general_category_id, "
+                await cursor.execute("INSERT INTO tickets_config (server_id, ticket_reference, ticket_general_category_id, "
                                      "channel_id, message_id, open_reaction_emoji, message_settings, "
                                      "ticket_general_log_channel, ticket_count, ticket_settings, "
                                      "ticket_reaction_lock_ids, ticket_support_roles, ticket_owner_id, "
@@ -746,7 +751,7 @@ class ticket(commands.Cog):
             offline_ticket_multiple[ticket_reference] = False
 
             try:
-                await cursor.execute("UPDATE datacenter SET "
+                await cursor.execute("UPDATE tickets_config SET "
                                      "ticket_reference = %s, ticket_general_category_id = %s, "
                                      "channel_id = %s, message_id = %s, open_reaction_emoji = %s, "
                                      "message_settings = %s, ticket_general_log_channel = %s, "
@@ -822,7 +827,7 @@ class ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE datacenter SET ticket_title_mode = %s WHERE server_id = %s;',
+        await cursor.execute(f'UPDATE tickets_config SET ticket_title_mode = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_title_mode']), guild_id))
         await self.load_db_var(guild_id)
 
@@ -836,7 +841,7 @@ class ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE datacenter SET ticket_multiple = %s WHERE server_id = %s;',
+        await cursor.execute(f'UPDATE tickets_config SET ticket_multiple = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_multiple']), guild_id))
         await self.load_db_var(guild_id)
 
@@ -868,7 +873,7 @@ class ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE datacenter SET message_settings = %s WHERE server_id = %s;',
+        await cursor.execute(f'UPDATE tickets_config SET message_settings = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['message_settings']), guild_id))
         await self.load_db_var(guild_id)
 
@@ -894,7 +899,7 @@ class ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE datacenter SET ticket_settings = %s WHERE server_id = %s;',
+        await cursor.execute(f'UPDATE tickets_config SET ticket_settings = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_settings']), guild_id))
         await self.load_db_var(guild_id)
 
@@ -933,7 +938,7 @@ class ticket(commands.Cog):
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
 
-        await cursor.execute("UPDATE datacenter SET channel_id = %s, message_id = %s WHERE server_id = %s;",
+        await cursor.execute("UPDATE tickets_config SET channel_id = %s, message_id = %s WHERE server_id = %s;",
                              (str(offline_channel_id), str(offline_message_id), guild_id))
         await self.load_db_var(only_guild=guild_id)
 
@@ -1031,7 +1036,7 @@ class ticket(commands.Cog):
                                          db=db,
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE datacenter SET ticket_count = %s, ticket_reaction_lock_ids = %s, '
+        await cursor.execute(f'UPDATE tickets_config SET ticket_count = %s, ticket_reaction_lock_ids = %s, '
                              f'ticket_owner_id = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_count']),
                               str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
@@ -1061,7 +1066,7 @@ class ticket(commands.Cog):
                 updated_roles.append(role.id)
                 foo += f'✅ Il ruolo {role.mention} ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi\n'
 
-        await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
+        await cursor.execute(f'UPDATE tickets_config SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.try_update_log_channel_overwrites(
             channel_log_id=self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference],
@@ -1090,7 +1095,7 @@ class ticket(commands.Cog):
             else:
                 foo += f'⚠ ️Il ruolo {role.mention} non ha ancora  i permessi per gestire i ticket **{ticket_reference}**'
 
-        await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
+        await cursor.execute(f'UPDATE tickets_config SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
         await self.try_update_log_channel_overwrites(
             channel_log_id=self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference],
@@ -1152,7 +1157,7 @@ class ticket(commands.Cog):
             offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
 
             offline_ticket_general_log_channel[ticket_reference] = channel.id
-            await cursor.execute("UPDATE datacenter SET ticket_general_log_channel = %s WHERE server_id = %s;",
+            await cursor.execute("UPDATE tickets_config SET ticket_general_log_channel = %s WHERE server_id = %s;",
                                  (str(offline_ticket_general_log_channel), guild.id))
             disconn.close()
 
@@ -1175,7 +1180,7 @@ class ticket(commands.Cog):
                                          autocommit=True)
         cursor = await disconn.cursor(aiomysql.DictCursor)
 
-        await cursor.execute(f'UPDATE datacenter SET ticket_reaction_lock_ids = %s, '
+        await cursor.execute(f'UPDATE tickets_config SET ticket_reaction_lock_ids = %s, '
                              f'ticket_owner_id = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
                               str(self.db_offline[guild_id]['ticket_owner_id']), guild.id), )
