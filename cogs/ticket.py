@@ -189,7 +189,7 @@ class ticket(commands.Cog):
                     sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
         await ctx.send(value)
 
-    @ticket.command(name='setup', description='cancella fino all ID del messaggio fornito')
+    @ticket.command(name='setup', description='Avvia la modalità di configurazione ticket')
     @commands.has_permissions(manage_messages=True)
     async def setup_subcommand(self, ctx):
         await self.ready_db()
