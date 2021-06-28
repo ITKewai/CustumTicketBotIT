@@ -6,7 +6,7 @@ from ast import literal_eval
 
 import discord
 import aiomysql
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 host = '192.168.1.123'
 port = 3306
@@ -53,7 +53,7 @@ def translate_fronts(_string):
     return _string.translate(str.maketrans(dip))
 
 
-class Ticket(commands.Cog):
+class ticket(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
@@ -61,7 +61,12 @@ class Ticket(commands.Cog):
         self.db_offline = {}
         self.antispam_lock = []
         self.n = '\n'
-        print(self.db_ready)
+        self._load_db.start()
+
+    @tasks.loop(count=1)
+    async def _load_db(self):
+        await self.bot.wait_until_ready()
+        await self.first_scan_db()
 
     async def ready_db(self):
         await self.bot.wait_until_ready()
@@ -70,16 +75,10 @@ class Ticket(commands.Cog):
         return True
 
     @commands.Cog.listener()
-    async def on_ready(self):
-        await self.first_scan_db()
-
-    @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
         await self.ready_db()
         if payload.guild_id in self.db_offline and not self.bot.get_user(payload.user_id).bot:
-            # if payload.message_id == self.db_offline[payload.guild_id]['message_id']:
             if payload.message_id in list(self.db_offline[payload.guild_id]['message_id'].values()):
-                # if str(payload.emoji) == self.db_offline[payload.guild_id]['open_reaction_emoji']:
                 if str(payload.emoji) in list(self.db_offline[payload.guild_id]['open_reaction_emoji'].values()):
                     guild = self.bot.get_guild(payload.guild_id)
                     channel = self.bot.get_channel(payload.channel_id)
@@ -173,7 +172,17 @@ class Ticket(commands.Cog):
 
     @commands.group(description='GRUPPO COMANDI TICKET', invoke_without_command=True)
     async def ticket(self, ctx):
-        await ctx.send("```diff\n-BLA BLA INFOMAZIONI\n+ bla \n- blabla altre informazioni\n+ informazioni utili```")
+        value = ''
+        for c in self.bot.get_cog('ticket').get_commands():
+            if not c.hidden:
+                try:
+                    if self.bot.get_command(c.name).commands:
+                        for a in self.bot.get_command(c.name).commands:
+                            value += f'  {c.name} {a.name} - {a.description}\n'
+                except:
+                    import sys
+                    sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
+        await ctx.send(value)
 
     @ticket.command(name='setup', description='cancella fino all ID del messaggio fornito')
     @commands.has_permissions(manage_messages=True)
@@ -207,13 +216,12 @@ class Ticket(commands.Cog):
                 return await msg.delete()
 
             embed = msg.embeds[0]
-            n = '\n'
             embed.description = f"A quale pannello vuoi aggiungere " \
                                 f"{'il ruolo ' if len(role) == 1 else 'i ruoli '}" \
                                 f"{' '.join([x.mention for x in role])}" \
                                 f"come support?\n\n " \
                                 f"PANNELLI DISPONIBILI:\n```fix\n" \
-                                f"{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
+                                f"{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
 
             await msg.edit(embed=embed)
 
@@ -251,7 +259,7 @@ class Ticket(commands.Cog):
 
             try:
                 _role = await self.bot.wait_for("message", timeout=40.0, check=check_role)
-                role = _role.role_mentions[0]
+                role = _role.role_mentions
                 await _role.delete()
             except asyncio.TimeoutError:
                 return await msg.delete()
@@ -262,7 +270,7 @@ class Ticket(commands.Cog):
                                 f"{' '.join([x.mention for x in role])}" \
                                 f"come support?\n\n " \
                                 f"PANNELLI DISPONIBILI:\n```fix\n" \
-                                f"{''.join(f'{x + n}' for x in offline_ticket_reference)}```"
+                                f"{''.join(f'{x + self.n}' for x in offline_ticket_reference)}```"
 
             await msg.edit(embed=embed)
 
@@ -490,7 +498,7 @@ class Ticket(commands.Cog):
                                                       description='```fix\nticket setup```',
                                                       colour=discord.Colour.red()))
 
-    @commands.command()
+    @commands.command(hidden=True)
     @commands.is_owner()
     async def delete(self, ctx):
         await self.ready_db()
@@ -584,7 +592,6 @@ class Ticket(commands.Cog):
         await self.load_db_var()
         self.db_ready = True
         disconn.close()
-        print(self.db_ready)
 
     async def first_ticket_setup(self, ctx):
         disconn = await aiomysql.connect(host=host,
@@ -633,7 +640,8 @@ class Ticket(commands.Cog):
             category = await ctx.guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
             channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category,
                                                           reason=None)
-            channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None,
+            overwrites = await self.return_overwrites(guild=ctx.guild, everyone=False)
+            channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=overwrites,
                                                                   category=category,
                                                                   reason=None)
         else:
@@ -641,7 +649,8 @@ class Ticket(commands.Cog):
                                                        reason='Ticket bot', position=0)
             channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category,
                                                           reason=None)
-            channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None,
+            overwrites = await self.return_overwrites(guild=ctx.guild, everyone=False)
+            channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=overwrites,
                                                                   category=category,
                                                                   reason=None)
 
@@ -989,24 +998,22 @@ class Ticket(commands.Cog):
         # END
 
         # TICKET CHANNEL RELATED
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False, ),
-            member: discord.PermissionOverwrite(read_messages=True, send_messages=True, )
-        }
-        if ticket_support_roles:
-            for role in ticket_support_roles:
-                role_obj = guild.get_role(role)
-                if role_obj:
-                    overwrites[role_obj] = discord.PermissionOverwrite(read_messages=True, send_messages=True, )
 
         ticket_title = await self.return_ticket_title_format(ticket_reference=ticket_reference,
                                                              ticket_number=ticket_count,
                                                              name=member.name,
                                                              ticket_title_mode=ticket_title_mode)
+        overwrites = await self.return_overwrites(guild=guild,
+                                                  member=member,
+                                                  roles_ids=ticket_support_roles if ticket_support_roles else None,
+                                                  everyone=False)
+
         channel = await guild.create_text_channel(ticket_title, overwrites=overwrites, category=category,
                                                   reason=None)
+
         embed = discord.Embed(title="", description=ticket_settings,
                               colour=discord.Colour.green())
+
         message = await channel.send(member.mention, embed=embed)
         # END
 
@@ -1045,15 +1052,21 @@ class Ticket(commands.Cog):
 
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         foo = ''
+        updated_roles = []
         for role in roles:
             if role.id in ticket_support_roles:
                 foo += f'⚠ ️Il ruolo {role.mention} ha già i permessi per geststire i ticket **{ticket_reference}** futuri\n'
             else:
                 ticket_support_roles.append(role.id)
+                updated_roles.append(role.id)
                 foo += f'✅ Il ruolo {role.mention} ha i permessi per gestire i ticket  **{ticket_reference}** d\'ora in poi\n'
 
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
+        await self.try_update_log_channel_overwrites(
+            channel_log_id=self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference],
+            roles_ids=updated_roles,
+            add=True)
         await self.load_db_var(guild_id)
         return foo
 
@@ -1068,17 +1081,34 @@ class Ticket(commands.Cog):
 
         ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
         foo = ''
+        updated_roles = []
         for role in roles:
             if role.id in ticket_support_roles:
                 ticket_support_roles.remove(role.id)
+                updated_roles.append(role.id)
                 foo += f'✅ Il ruolo {role.mention} non potrà gestire i ticket  **{ticket_reference}** d\'ora in poi'
             else:
                 foo += f'⚠ ️Il ruolo {role.mention} non ha ancora  i permessi per gestire i ticket **{ticket_reference}**'
 
         await cursor.execute(f'UPDATE datacenter SET ticket_support_roles = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
+        await self.try_update_log_channel_overwrites(
+            channel_log_id=self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference],
+            roles_ids=updated_roles,
+            add=False)
         await self.load_db_var(guild_id)
         return foo
+
+    async def try_update_log_channel_overwrites(self, channel_log_id: int, roles_ids: list, add: bool = True):
+        channel_log = self.bot.get_channel(channel_log_id)
+        if channel_log:
+            overwrites_old = channel_log.overwrites
+            overwrites = await self.return_overwrites(guild=channel_log.guild,
+                                                      roles_ids=roles_ids,
+                                                      overwrites=overwrites_old,
+                                                      everyone=False,
+                                                      add=add if add else False)
+            await channel_log.edit(overwrites=overwrites)
 
     async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int,
                            ticket_reference):
@@ -1111,8 +1141,12 @@ class Ticket(commands.Cog):
                                              password=password,
                                              db=db,
                                              autocommit=True)
+
             cursor = await disconn.cursor(aiomysql.DictCursor)
-            channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=None,
+
+            overwrites = await self.return_overwrites(guild=guild, everyone=False)
+            channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢',
+                                                      overwrites=overwrites,
                                                       category=category,
                                                       reason=None)
             offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
@@ -1149,6 +1183,33 @@ class Ticket(commands.Cog):
         await self.load_db_var(guild_id)
         disconn.close()
 
+    async def return_overwrites(self,
+                                guild: discord.Guild,
+                                overwrites: dict = None,
+                                roles_ids: list = None,
+                                member: discord.Member = None,
+                                everyone: bool = True,
+                                add: bool = True):
+
+        if not overwrites:
+            overwrites = {guild.default_role: discord.PermissionOverwrite(read_messages=True if everyone else False,
+                                                                          send_messages=True if everyone else False,
+                                                                          ), }
+
+        if member:
+            overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True, )
+
+        if roles_ids:
+            for role in roles_ids:
+
+                role_obj = guild.get_role(role)
+                if role_obj:
+                    if add:
+                        overwrites[role_obj] = discord.PermissionOverwrite(read_messages=True, send_messages=True, )
+                    else:
+                        overwrites.pop(role_obj, None)
+        return overwrites
+
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
@@ -1157,4 +1218,4 @@ class Ticket(commands.Cog):
 
 
 def setup(bot):
-    bot.add_cog(Ticket(bot))
+    bot.add_cog(ticket(bot))
