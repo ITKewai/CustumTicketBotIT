@@ -3,8 +3,10 @@ import datetime
 import json
 import traceback
 from ast import literal_eval
+
 try:
     from data.config import *
+
     is_ciro_bot = True
 except:
     is_ciro_bot = False
@@ -15,7 +17,7 @@ from discord.ext import commands, tasks
 
 host = '192.168.1.123' if not is_ciro_bot else db_new_host
 port = 3306 if not is_ciro_bot else db_new_port
-user = 'kewai'if not is_ciro_bot else db_new_user
+user = 'kewai' if not is_ciro_bot else db_new_user
 password = 'kokokoko1' if not is_ciro_bot else db_new_pass
 db = 'TICKETS' if not is_ciro_bot else db_new_name
 
@@ -638,22 +640,20 @@ class ticket(commands.Cog):
             except asyncio.TimeoutError:
                 return
 
-            # return await not_first_ticket_setup()
-            # ticket_reference = 'DEFAULT' chiedi il nome che avrà il pannello
-            # return '⚠ **️Il setup per questo server, è gia stato impostato una volta.** ⚠️\n\n' \
-            #        'Se vuoi cancellare tutti i ticket e le impostazioni usa il comando **reset**'
         if exist != 1:
+            overwrites = await self.return_overwrites(guild=ctx.guild, everyone=True)
             category = await ctx.guild.create_category('TICKET', overwrites=None, reason='Ticket bot', position=0)
-            channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category,
+            channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=overwrites, category=category,
                                                           reason=None)
             overwrites = await self.return_overwrites(guild=ctx.guild, everyone=False)
             channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=overwrites,
                                                                   category=category,
                                                                   reason=None)
         else:
+            overwrites = await self.return_overwrites(guild=ctx.guild, everyone=True)
             category = await ctx.guild.create_category(f'TICKET {ticket_reference}', overwrites=None,
                                                        reason='Ticket bot', position=0)
-            channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=None, category=category,
+            channel = await ctx.guild.create_text_channel('🔖｜𝗧𝗜𝗖𝗞𝗘𝗧', overwrites=overwrites, category=category,
                                                           reason=None)
             overwrites = await self.return_overwrites(guild=ctx.guild, everyone=False)
             channel_archive = await ctx.guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢', overwrites=overwrites,
@@ -692,18 +692,19 @@ class ticket(commands.Cog):
             _ticket_multiple = {ticket_reference: False}
 
             try:
-                await cursor.execute("INSERT INTO tickets_config (server_id, ticket_reference, ticket_general_category_id, "
-                                     "channel_id, message_id, open_reaction_emoji, message_settings, "
-                                     "ticket_general_log_channel, ticket_count, ticket_settings, "
-                                     "ticket_reaction_lock_ids, ticket_support_roles, ticket_owner_id, "
-                                     "ticket_closer_user_id, ticket_title_mode, ticket_multiple) "
-                                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
-                                     (ctx.guild.id, str(_ticket_reference), str(_category_id), str(_channel_id),
-                                      str(_message),
-                                      str(_emoji), str(_ticket_set), str(_channel_archive), str(_ticket_count),
-                                      str(_ticket_settings), str(_ticket_reaction_lock_ids), str(_ticket_support_roles),
-                                      str(_ticket_owner_id), str(_ticket_closer_user_id), str(_ticket_title_mode),
-                                      str(_ticket_multiple)))
+                await cursor.execute(
+                    "INSERT INTO tickets_config (server_id, ticket_reference, ticket_general_category_id, "
+                    "channel_id, message_id, open_reaction_emoji, message_settings, "
+                    "ticket_general_log_channel, ticket_count, ticket_settings, "
+                    "ticket_reaction_lock_ids, ticket_support_roles, ticket_owner_id, "
+                    "ticket_closer_user_id, ticket_title_mode, ticket_multiple) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
+                    (ctx.guild.id, str(_ticket_reference), str(_category_id), str(_channel_id),
+                     str(_message),
+                     str(_emoji), str(_ticket_set), str(_channel_archive), str(_ticket_count),
+                     str(_ticket_settings), str(_ticket_reaction_lock_ids), str(_ticket_support_roles),
+                     str(_ticket_owner_id), str(_ticket_closer_user_id), str(_ticket_title_mode),
+                     str(_ticket_multiple)))
                 await self.load_db_var(only_guild=ctx.guild.id)
                 disconn.close()
                 return '**Creazione canali completate, TICKET abilitati**'
@@ -1197,9 +1198,12 @@ class ticket(commands.Cog):
                                 everyone: bool = True,
                                 add: bool = True):
 
+        # non ricordo a cosa revrica everyone true
+
         if not overwrites:
             overwrites = {guild.default_role: discord.PermissionOverwrite(read_messages=True if everyone else False,
-                                                                          send_messages=True if everyone else False,
+                                                                          send_messages=False,
+                                                                          add_reactions=False
                                                                           ), }
 
         if member:
