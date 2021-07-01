@@ -121,7 +121,8 @@ class ticket(commands.Cog):
                                                                                  tick_message=payload.message_id,
                                                                                  ticket_reference=ticket_reference)
                             ticket_support = await self.return_ticket_support_roles_id(guild_id=payload.guild_id,
-                                                                                       ticket_reference=ticket_reference)
+                                                                                       ticket_reference=ticket_reference
+                                                                                       )
 
                             def check(raw_payload):
                                 return raw_payload.member and str(raw_payload.emoji) in ['❌', '✅'] \
@@ -183,11 +184,11 @@ class ticket(commands.Cog):
                 try:
                     if self.bot.get_command(c.name).commands:
                         for a in self.bot.get_command(c.name).commands:
-                            value += f'  {c.name} {a.name} - {a.description}\n'
+                            value += f'`{c.name} {a.name}` - {a.description}\n'
                 except:
                     import sys
                     sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
-        await ctx.send(value)
+        await ctx.send(value + 'TICKET IN BETA-TEST')
 
     @ticket.command(name='setup', description='Avvia la modalità di configurazione ticket')
     @commands.has_permissions(manage_messages=True)
@@ -1215,6 +1216,13 @@ class ticket(commands.Cog):
                         overwrites.pop(role_obj, None)
         return overwrites
 
+    # TODO: ticket_closer_user_id DA RIMUOVERE
+    # TODO: AGGIUNGERE COMANDO CLOSE
+    # TODO: AGGIUNGERE CLAIM
+    # TODO: AGGIUNGERE AMMINISTRATORE PUÒ CHIUDERE TICKET ANCHE NON IN SETUP
+    # TODO: AGGIUNGERE OPEN TIME DEL TICKET
+    # TODO: AGGIUNGERE REASON
+    # TODO: PERMESSO REAZIONI DIVERSE DA QUELLE GIA ESISTENTI NEGATO
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
