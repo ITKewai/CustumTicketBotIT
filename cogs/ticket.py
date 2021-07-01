@@ -178,7 +178,7 @@ class ticket(commands.Cog):
                     import sys
                     sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
 
-    @commands.group(description='GRUPPO COMANDI TICKET', invoke_without_command=True)
+    @commands.group(aliases=['tk'], description='GRUPPO COMANDI TICKET', invoke_without_command=True)
     async def ticket(self, ctx):
         value = ''
         for c in self.bot.get_cog('ticket').get_commands():
@@ -506,6 +506,12 @@ class ticket(commands.Cog):
                                                       description='```fix\nticket setup```',
                                                       colour=discord.Colour.red()))
 
+    @ticket.command(name='claim', description='Avvia la modalità di configurazione ticket')
+    async def claim_subcommand(self, ctx):
+        await self.ready_db()
+        if await self.ticket_enabled(ctx.guild.id):
+            await self.claim_ticket(member=ctx.author)
+
     @commands.command(hidden=True)
     @commands.is_owner()
     async def delete(self, ctx):
@@ -541,8 +547,8 @@ class ticket(commands.Cog):
                                                             y['ticket_reaction_lock_ids']),
                                                         'ticket_support_roles': literal_eval(y['ticket_support_roles']),
                                                         'ticket_owner_id': literal_eval(y['ticket_owner_id']),
-                                                        'ticket_closer_user_id': literal_eval(
-                                                            y['ticket_closer_user_id']),
+                                                        'ticket_claim_user_id': literal_eval(
+                                                            y['ticket_claim_user_id']),
                                                         'ticket_title_mode': literal_eval(y['ticket_title_mode']),
                                                         'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                         }
@@ -564,7 +570,7 @@ class ticket(commands.Cog):
                                                         y['ticket_reaction_lock_ids']),
                                                     'ticket_support_roles': literal_eval(y['ticket_support_roles']),
                                                     'ticket_owner_id': literal_eval(y['ticket_owner_id']),
-                                                    'ticket_closer_user_id': literal_eval(y['ticket_closer_user_id']),
+                                                    'ticket_claim_user_id': literal_eval(y['ticket_claim_user_id']),
                                                     'ticket_title_mode': literal_eval(y['ticket_title_mode']),
                                                     'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                     }
@@ -594,7 +600,7 @@ class ticket(commands.Cog):
                                  "ticket_reaction_lock_ids text, "
                                  "ticket_support_roles text, "
                                  "ticket_owner_id text, "
-                                 "ticket_closer_user_id text,"
+                                 "ticket_claim_user_id text,"
                                  "ticket_title_mode text,"
                                  "ticket_multiple text);")
         await self.load_db_var()
@@ -683,7 +689,7 @@ class ticket(commands.Cog):
             _ticket_reaction_lock_ids = {ticket_reference: {}}
             _ticket_support_roles = {ticket_reference: []}
             _ticket_owner_id = {ticket_reference: {}}
-            _ticket_closer_user_id = {ticket_reference: {}}
+            _ticket_claim_user_id = {ticket_reference: {}}
             _ticket_title_mode = {ticket_reference: {'ticket_number': True,
                                                      'ticket_name': False,
                                                      'number_name': False,
@@ -697,13 +703,13 @@ class ticket(commands.Cog):
                     "channel_id, message_id, open_reaction_emoji, message_settings, "
                     "ticket_general_log_channel, ticket_count, ticket_settings, "
                     "ticket_reaction_lock_ids, ticket_support_roles, ticket_owner_id, "
-                    "ticket_closer_user_id, ticket_title_mode, ticket_multiple) "
+                    "ticket_claim_user_id, ticket_title_mode, ticket_multiple) "
                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);",
                     (ctx.guild.id, str(_ticket_reference), str(_category_id), str(_channel_id),
                      str(_message),
                      str(_emoji), str(_ticket_set), str(_channel_archive), str(_ticket_count),
                      str(_ticket_settings), str(_ticket_reaction_lock_ids), str(_ticket_support_roles),
-                     str(_ticket_owner_id), str(_ticket_closer_user_id), str(_ticket_title_mode),
+                     str(_ticket_owner_id), str(_ticket_claim_user_id), str(_ticket_title_mode),
                      str(_ticket_multiple)))
                 await self.load_db_var(only_guild=ctx.guild.id)
                 disconn.close()
@@ -725,7 +731,7 @@ class ticket(commands.Cog):
             offline_ticket_reaction_lock_ids = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids']
             offline_ticket_support_roles = self.db_offline[ctx.guild.id]['ticket_support_roles']
             offline_ticket_owner_id = self.db_offline[ctx.guild.id]['ticket_owner_id']
-            offline_ticket_closer_user_id = self.db_offline[ctx.guild.id]['ticket_closer_user_id']
+            offline_ticket_claim_user_id = self.db_offline[ctx.guild.id]['ticket_claim_user_id']
             offline_ticket_title_mode = self.db_offline[ctx.guild.id]['ticket_title_mode']
             offline_ticket_multiple = self.db_offline[ctx.guild.id]['ticket_multiple']
 
@@ -744,7 +750,7 @@ class ticket(commands.Cog):
             offline_ticket_reaction_lock_ids[ticket_reference] = {}
             offline_ticket_support_roles[ticket_reference] = []
             offline_ticket_owner_id[ticket_reference] = {}
-            offline_ticket_closer_user_id[ticket_reference] = {}
+            offline_ticket_claim_user_id[ticket_reference] = {}
             offline_ticket_title_mode[ticket_reference] = {'ticket_number': True,
                                                            'ticket_name': False,
                                                            'number_name': False,
@@ -758,7 +764,7 @@ class ticket(commands.Cog):
                                      "channel_id = %s, message_id = %s, open_reaction_emoji = %s, "
                                      "message_settings = %s, ticket_general_log_channel = %s, "
                                      "ticket_count = %s, ticket_settings = %s, ticket_reaction_lock_ids = %s, "
-                                     "ticket_support_roles = %s, ticket_owner_id = %s, ticket_closer_user_id = %s, "
+                                     "ticket_support_roles = %s, ticket_owner_id = %s, ticket_claim_user_id = %s, "
                                      "ticket_title_mode = %s, ticket_multiple = %s "
                                      "WHERE "
                                      "server_id = %s;",
@@ -774,7 +780,7 @@ class ticket(commands.Cog):
                                       str(offline_ticket_reaction_lock_ids),
                                       str(offline_ticket_support_roles),
                                       str(offline_ticket_owner_id),
-                                      str(offline_ticket_closer_user_id),
+                                      str(offline_ticket_claim_user_id),
                                       str(offline_ticket_title_mode),
                                       str(offline_ticket_multiple),
                                       ctx.guild.id))
@@ -1220,6 +1226,34 @@ class ticket(commands.Cog):
                         overwrites.pop(role_obj, None)
         return overwrites
 
+    async def claim_ticket(self, ctx):
+        ticket_reference = await self.return_ticket_reference(guild_id=ctx.author.guild.id,
+                                                              name_of_table='ticket_owner_id',
+                                                              element=ctx.channel.id)
+        if not ticket_reference:
+            return
+
+        member_roles = [role.id for role in ctx.author.roles]
+        ticket_support_roles = self.db_offline[ctx.guild.id]['ticket_support_roles'][ticket_reference]
+        foo = ''
+        updated_roles = []
+
+        disconn = await aiomysql.connect(host=host,
+                                         port=port,
+                                         user=user,
+                                         password=password,
+                                         db=db,
+                                         autocommit=True)
+        cursor = await disconn.cursor(aiomysql.DictCursor)
+
+        await cursor.execute(f'UPDATE tickets_config SET ticket_support_roles = %s WHERE server_id = %s;',
+                             (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
+        await self.try_update_log_channel_overwrites(
+            channel_log_id=self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference],
+            roles_ids=updated_roles,
+            add=False)
+        await self.load_db_var(guild_id)
+        return foo
     # TODO: ticket_closer_user_id DA RIMUOVERE
     # TODO: AGGIUNGERE COMANDO CLOSE
     # TODO: AGGIUNGERE CLAIM
