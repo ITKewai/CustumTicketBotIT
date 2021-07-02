@@ -134,7 +134,7 @@ class ticket(commands.Cog):
                                        (raw_payload.user_id == ticket_owner or
                                         any(role for role in ticket_support if
                                             role in [role.id for role in raw_payload.member.roles])
-                                        or member.guild_permissions.administrator is True)
+                                        or (member.guild_permissions.administrator is True and member.id == raw_payload.user_id))
 
                             #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
                             if (not any(role for role in ticket_support if role in [role.id for role in
@@ -1207,6 +1207,7 @@ class ticket(commands.Cog):
         embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
+        embed.add_field(name='Il', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
         try:
             embed.add_field(name='Gestito da', value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
                             inline=False)
