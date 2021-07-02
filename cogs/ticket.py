@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import json
+import locale
 import traceback
 from ast import literal_eval
 
@@ -69,6 +70,7 @@ class ticket(commands.Cog):
         self.antispam_lock = []
         self.n = '\n'
         self._load_db.start()
+        locale.setlocale(locale.LC_ALL, 'it_IT.utf8')
 
     @tasks.loop(count=1)
     async def _load_db(self):
@@ -131,7 +133,8 @@ class ticket(commands.Cog):
                                        and \
                                        (raw_payload.user_id == ticket_owner or
                                         any(role for role in ticket_support if
-                                            role in [role.id for role in raw_payload.member.roles]))
+                                            role in [role.id for role in raw_payload.member.roles])
+                                        or member.guild_permissions.administrator is True)
 
                             #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
                             if (not any(role for role in ticket_support if role in [role.id for role in
@@ -194,12 +197,14 @@ class ticket(commands.Cog):
 
     @ticket.command(name='setup', description='Avvia la modalità di configurazione ticket')
     @commands.has_permissions(manage_messages=True)
+    @commands.guild_only()
     async def setup_subcommand(self, ctx):
         await self.ready_db()
         await ctx.send(await self.first_ticket_setup(ctx=ctx))
 
     @ticket.command(name='addsupport', description='Aggiunge un ruolo come support dei ticket futuri')
     @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
     async def add_support_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -248,6 +253,7 @@ class ticket(commands.Cog):
 
     @ticket.command(name='removesupport', description='Rimuove un ruolo come support dei ticket futuri')
     @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
     async def remove_support_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -297,6 +303,7 @@ class ticket(commands.Cog):
 
     @ticket.command(name='edit', description='Ti permette di modificare le impostazioni per i ticket')
     @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
     async def edit_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -463,6 +470,7 @@ class ticket(commands.Cog):
 
     @ticket.command(name='movepanel', description='Ti permette di spostare il pannello di reazione per i ticket')
     @commands.has_permissions(manage_guild=True)
+    @commands.guild_only()
     async def move_panel_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
@@ -507,10 +515,32 @@ class ticket(commands.Cog):
                                                       colour=discord.Colour.red()))
 
     @ticket.command(name='claim', description='Avvia la modalità di configurazione ticket')
+    @commands.guild_only()
     async def claim_subcommand(self, ctx):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
-            await self.claim_ticket(member=ctx.author)
+            await ctx.message.delete()
+            await ctx.send(await self.claim_ticket(ctx=ctx))
+
+    @ticket.command(name='close', description='Chiude un ticket')
+    @commands.guild_only()
+    async def close_subcommand(self, ctx):
+        await self.ready_db()
+        if await self.ticket_enabled(ctx.guild.id):
+            await ctx.message.delete()
+            # fai check siamo in un ticket
+            ticket_reference = await self.return_ticket_reference(guild_id=ctx.guild.id,
+                                                                  name_of_table='ticket_reaction_lock_ids',
+                                                                  element=ctx.channel.id)
+            message_id = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids'][ticket_reference]
+            for x, y in message_id.items():
+                if y == ctx.channel.id:
+
+                    await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
+                                                           channel_id=ctx.channel.id,
+                                                           closer_user_id=ctx.author.id,
+                                                           message_id=x,
+                                                           ticket_reference=ticket_reference))
 
     @commands.command(hidden=True)
     @commands.is_owner()
@@ -642,7 +672,7 @@ class ticket(commands.Cog):
             try:
                 # _ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check)
                 ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check)
-                ticket_reference = ticket_reference.content.upper()
+                ticket_reference = ticket_reference.content.split(' ')[0].upper()
             except asyncio.TimeoutError:
                 return
 
@@ -807,6 +837,8 @@ class ticket(commands.Cog):
         except:
             for y, z in self.db_offline[guild_id][name_of_table].items():
                 if element in z.values():
+                    return y
+                if element in z.keys():
                     return y
 
     async def return_ticket_owner_id_raw(self, guild_id: int, tick_message: int, ticket_reference):
@@ -1136,6 +1168,7 @@ class ticket(commands.Cog):
         ticket_settings = self.db_offline[guild_id]['ticket_settings'][ticket_reference]
         ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference]
         ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id'][ticket_reference]
+        ticket_claim_user_id = self.db_offline[guild_id]['ticket_claim_user_id'][ticket_reference]
 
         # CLOSE TICKET CHANNEL
         guild = self.bot.get_guild(guild_id)
@@ -1145,9 +1178,9 @@ class ticket(commands.Cog):
         await channel.delete()
 
         # SEND LOG CHANNEL INFO
-        channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
+        _channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
 
-        if not channel:
+        if not _channel:
             disconn = await aiomysql.connect(host=host,
                                              port=port,
                                              user=user,
@@ -1158,13 +1191,13 @@ class ticket(commands.Cog):
             cursor = await disconn.cursor(aiomysql.DictCursor)
 
             overwrites = await self.return_overwrites(guild=guild, everyone=False)
-            channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢',
-                                                      overwrites=overwrites,
-                                                      category=category,
-                                                      reason=None)
+            _channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢',
+                                                       overwrites=overwrites,
+                                                       category=category,
+                                                       reason=None)
             offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
 
-            offline_ticket_general_log_channel[ticket_reference] = channel.id
+            offline_ticket_general_log_channel[ticket_reference] = _channel.id
             await cursor.execute("UPDATE tickets_config SET ticket_general_log_channel = %s WHERE server_id = %s;",
                                  (str(offline_ticket_general_log_channel), guild.id))
             disconn.close()
@@ -1174,9 +1207,13 @@ class ticket(commands.Cog):
         embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
-        embed.add_field(name='Il', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
+        try:
+            embed.add_field(name='Gestito da', value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
+                            inline=False)
+        except:
+            pass
 
-        await channel.send(embed=embed)
+        await _channel.send(embed=embed)
         # UPDATE OFFLINE DB
         self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].pop(message_id)
         self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].pop(message_id)
@@ -1228,44 +1265,48 @@ class ticket(commands.Cog):
 
     async def claim_ticket(self, ctx):
         ticket_reference = await self.return_ticket_reference(guild_id=ctx.author.guild.id,
-                                                              name_of_table='ticket_owner_id',
+                                                              name_of_table='ticket_reaction_lock_ids',
                                                               element=ctx.channel.id)
         if not ticket_reference:
-            return
+            return 'Comando disponibile solo nei canali ticket'
 
-        member_roles = [role.id for role in ctx.author.roles]
         ticket_support_roles = self.db_offline[ctx.guild.id]['ticket_support_roles'][ticket_reference]
-        foo = ''
-        updated_roles = []
+        if any(role for role in ticket_support_roles if role in [role.id for role in ctx.author.roles]):
+            ticket_claim_user_id = self.db_offline[ctx.guild.id]['ticket_claim_user_id'][ticket_reference]
 
-        disconn = await aiomysql.connect(host=host,
-                                         port=port,
-                                         user=user,
-                                         password=password,
-                                         db=db,
-                                         autocommit=True)
-        cursor = await disconn.cursor(aiomysql.DictCursor)
+            try:
+                if ticket_claim_user_id[ctx.channel.id] == ctx.author.id:
+                    return f'{ctx.author.mention} in questo momento hai già in carico il  ticket'
+            except:
+                pass
 
-        await cursor.execute(f'UPDATE tickets_config SET ticket_support_roles = %s WHERE server_id = %s;',
-                             (str(self.db_offline[guild_id]['ticket_support_roles']), guild_id))
-        await self.try_update_log_channel_overwrites(
-            channel_log_id=self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference],
-            roles_ids=updated_roles,
-            add=False)
-        await self.load_db_var(guild_id)
-        return foo
-    # TODO: ticket_closer_user_id DA RIMUOVERE
+            ticket_claim_user_id[ctx.channel.id] = ctx.author.id
+
+            disconn = await aiomysql.connect(host=host,
+                                             port=port,
+                                             user=user,
+                                             password=password,
+                                             db=db,
+                                             autocommit=True)
+            cursor = await disconn.cursor(aiomysql.DictCursor)
+
+            await cursor.execute(f'UPDATE tickets_config SET ticket_claim_user_id = %s WHERE server_id = %s;',
+                                 (str(self.db_offline[ctx.guild.id]['ticket_claim_user_id']), ctx.guild.id))
+            await self.load_db_var(ctx.guild.id)
+
+            return f'{ctx.author.mention} ha preso questo ticket in carico.'
+        else:
+            return 'Solo chi ha un ruolo support può usare questo comando!'
+
     # TODO: AGGIUNGERE COMANDO CLOSE
-    # TODO: AGGIUNGERE CLAIM
-    # TODO: AGGIUNGERE AMMINISTRATORE PUÒ CHIUDERE TICKET ANCHE NON IN SETUP
     # TODO: AGGIUNGERE OPEN TIME DEL TICKET
     # TODO: AGGIUNGERE REASON
-    # TODO: PERMESSO REAZIONI DIVERSE DA QUELLE GIA ESISTENTI NEGATO
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
     # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET meh...
     # TODO: OPZIONALE SE HA IN COMUNE PIU DI UN SERVER DISCORD CHIEDE IN QUALE APRIRE IL TICKET meh...
+    # TODO: MIGLIORA return_ticket_reference CHEE è UNA MEDDA
 
 
 def setup(bot):
