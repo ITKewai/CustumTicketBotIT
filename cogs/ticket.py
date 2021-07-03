@@ -1546,9 +1546,9 @@ class ticket(commands.Cog):
         import sys
         sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
         try:
-            await self.bot.get_channel(714813858530721862).send('# # # cogs.ticket # # #' +
+            await self.bot.get_channel(714813858530721862).send('`# # # cogs.ticket # # #`' +
                                                                 traceback.format_exc() +
-                                                                '# # # cogs.ticket # # #')
+                                                                '`# # # cogs.ticket # # #`')
         except AttributeError:
             pass
 
