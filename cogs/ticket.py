@@ -1,6 +1,5 @@
 import asyncio
-import datetime
-import json
+from datetime import datetime, timezone
 import locale
 import traceback
 from ast import literal_eval
@@ -134,7 +133,8 @@ class ticket(commands.Cog):
                                        (raw_payload.user_id == ticket_owner or
                                         any(role for role in ticket_support if
                                             role in [role.id for role in raw_payload.member.roles])
-                                        or (member.guild_permissions.administrator is True and member.id == raw_payload.user_id))
+                                        or (
+                                                    member.guild_permissions.administrator is True and member.id == raw_payload.user_id))
 
                             #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
                             if (not any(role for role in ticket_support if role in [role.id for role in
@@ -528,19 +528,21 @@ class ticket(commands.Cog):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
             await ctx.message.delete()
-            # fai check siamo in un ticket
+            # fai check siamo in un ticket , TODO: aggiungere conferma chusura
             ticket_reference = await self.return_ticket_reference(guild_id=ctx.guild.id,
                                                                   name_of_table='ticket_reaction_lock_ids',
                                                                   element=ctx.channel.id)
             message_id = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids'][ticket_reference]
-            for x, y in message_id.items():
+            for x, y in message_id.copy().items():
                 if y == ctx.channel.id:
-
-                    await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
-                                                           channel_id=ctx.channel.id,
-                                                           closer_user_id=ctx.author.id,
-                                                           message_id=x,
-                                                           ticket_reference=ticket_reference))
+                    try:
+                        return await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
+                                                                      channel_id=ctx.channel.id,
+                                                                      closer_user_id=ctx.author.id,
+                                                                      message_id=x,
+                                                                      ticket_reference=ticket_reference))
+                    except discord.errors.NotFound:
+                        pass  # ctx.channel is deleted...
 
     @commands.command(hidden=True)
     @commands.is_owner()
@@ -1206,11 +1208,14 @@ class ticket(commands.Cog):
         closer_user_obj = self.bot.get_user(closer_user_id)
         embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
+        embed.add_field(name='Il', value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"), inline=True)
+        embed.add_field(name='Alle', value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"), inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
-        embed.add_field(name='Il', value=datetime.datetime.now().strftime("%m/%d/%Y alle %H:%M:%S"), inline=True)
+        embed.add_field(name='Il', value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"), inline=True)
+        embed.add_field(name='Alle', value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"), inline=True)
         try:
             embed.add_field(name='Gestito da', value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
-                            inline=False)
+                            inline=True)
         except:
             pass
 
@@ -1299,10 +1304,8 @@ class ticket(commands.Cog):
         else:
             return 'Solo chi ha un ruolo support può usare questo comando!'
 
-    # TODO: AGGIUNGERE COMANDO CLOSE
-    # TODO: AGGIUNGERE OPEN TIME DEL TICKET
-    # TODO: AGGIUNGERE REASON
     # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
+    # TODO: AGGIUNGERE REASON meh..
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
     # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET meh...
