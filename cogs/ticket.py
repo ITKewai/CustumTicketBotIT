@@ -135,7 +135,7 @@ class ticket(commands.Cog):
                                         any(role for role in ticket_support if
                                             role in [role.id for role in raw_payload.member.roles])
                                         or (
-                                                    member.guild_permissions.administrator is True and member.id == raw_payload.user_id))
+                                                member.guild_permissions.administrator is True and member.id == raw_payload.user_id))
 
                             #  NON SEI PROPRIETARIO DEL TICKET - NON HAI IL RUOLO SUPPORT
                             if (not any(role for role in ticket_support if role in [role.id for role in
@@ -227,7 +227,8 @@ class ticket(commands.Cog):
                 role = _role.role_mentions
                 await _role.delete()
             except asyncio.TimeoutError:
-                return await msg.delete()
+                await msg.delete()
+                return
 
             embed = msg.embeds[0]
             embed.description = f"A quale pannello vuoi aggiungere " \
@@ -243,14 +244,16 @@ class ticket(commands.Cog):
                 _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
                 ticket_reference = _reference.content.upper()
             except asyncio.TimeoutError:
-                return await msg.delete()
+                await msg.delete()
+                return
 
             await ctx.send(
                 await self.add_support_role(guild_id=ctx.guild.id, roles=role, ticket_reference=ticket_reference))
         else:
-            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```',
-                                                      colour=discord.Colour.red()))
+            await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                               description='```fix\nticket setup```',
+                                               colour=discord.Colour.red()))
+            return
 
     @ticket.command(name='removesupport', description='Rimuove un ruolo come support dei ticket futuri')
     @commands.has_permissions(manage_guild=True)
@@ -277,7 +280,8 @@ class ticket(commands.Cog):
                 role = _role.role_mentions
                 await _role.delete()
             except asyncio.TimeoutError:
-                return await msg.delete()
+                await msg.delete()
+                return
 
             embed = msg.embeds[0]
             embed.description = f"A quale pannello vuoi rimuovere " \
@@ -293,14 +297,16 @@ class ticket(commands.Cog):
                 _reference = await self.bot.wait_for("message", timeout=40.0, check=check_reference)
                 ticket_reference = _reference.content.upper()
             except asyncio.TimeoutError:
-                return await msg.delete()
+                await msg.delete()
+                return
 
             await ctx.send(
                 await self.rem_support_role(guild_id=ctx.guild.id, roles=role, ticket_reference=ticket_reference))
         else:
-            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```',
-                                                      colour=discord.Colour.red()))
+            await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                               description='```fix\nticket setup```',
+                                               colour=discord.Colour.red()))
+            return
 
     @ticket.command(name='edit', description='Ti permette di modificare le impostazioni per i ticket')
     @commands.has_permissions(manage_guild=True)
@@ -463,11 +469,13 @@ class ticket(commands.Cog):
                 await msg.delete()
                 await ctx.send('Impostazioni eseguite con successo.')
             except asyncio.TimeoutError:
-                return await msg.delete()
+                await msg.delete()
+                return
         else:
-            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```',
-                                                      colour=discord.Colour.red()))
+            await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                               description='```fix\nticket setup```',
+                                               colour=discord.Colour.red()))
+            return
 
     @ticket.command(name='movepanel', description='Ti permette di spostare il pannello di reazione per i ticket')
     @commands.has_permissions(manage_guild=True)
@@ -509,11 +517,13 @@ class ticket(commands.Cog):
                 await ctx.send('Impostazioni eseguite con successo.')
 
             except asyncio.TimeoutError:
-                return await msg.delete()
+                await msg.delete()
+                return
         else:
-            return await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
-                                                      description='```fix\nticket setup```',
-                                                      colour=discord.Colour.red()))
+            await ctx.send(embed=discord.Embed(title='⚠ | Prima di utilizzare questo comando scrivi',
+                                               description='```fix\nticket setup```',
+                                               colour=discord.Colour.red()))
+            return
 
     @ticket.command(name='claim', description='Avvia la modalità di configurazione ticket')
     @commands.guild_only()
@@ -537,11 +547,12 @@ class ticket(commands.Cog):
                 for x, y in message_id.copy().items():
                     if y == ctx.channel.id:
                         try:
-                            return await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
-                                                                          channel_id=ctx.channel.id,
-                                                                          closer_user_id=ctx.author.id,
-                                                                          message_id=x,
-                                                                          ticket_reference=ticket_reference))
+                            await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
+                                                                   channel_id=ctx.channel.id,
+                                                                   closer_user_id=ctx.author.id,
+                                                                   message_id=x,
+                                                                   ticket_reference=ticket_reference))
+                            return
                         except discord.errors.NotFound:
                             pass  # ctx.channel is deleted...
 
@@ -1040,13 +1051,15 @@ class ticket(commands.Cog):
                         channel = self.bot.get_channel(
                             self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
                         if channel:
-                            return await channel.send(member.mention +
-                                                      '```diff\n-Hai già un ticket aperto utilizza questo! ```')
+                            await channel.send(member.mention +
+                                               '```diff\n-Hai già un ticket aperto utilizza questo! ```')
+                            return
 
                 except:
-                    return await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
+                    await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
+                    return
 
-        # END
+                    # END
 
         # TICKET CHANNEL RELATED
 
@@ -1186,7 +1199,8 @@ class ticket(commands.Cog):
 
         try:
             _no_message_sent = await self.bot.wait_for("message", timeout=5.0, check=check_interaction)
-            return await channel.send(' ! Rilevata interazionecon il ticket, annullo la chiusura')
+            await channel.send(' ! Rilevata interazionecon il ticket, annullo la chiusura')
+            return
         except asyncio.TimeoutError:
             pass
 
@@ -1222,11 +1236,19 @@ class ticket(commands.Cog):
         closer_user_obj = self.bot.get_user(closer_user_id)
         embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
         embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
-        embed.add_field(name='Il', value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"), inline=True)
-        embed.add_field(name='Alle', value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"), inline=True)
+        embed.add_field(name='Il',
+                        value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"),
+                        inline=True)
+        embed.add_field(name='Alle',
+                        value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"),
+                        inline=True)
         embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
-        embed.add_field(name='Il', value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"), inline=True)
-        embed.add_field(name='Alle', value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"), inline=True)
+        embed.add_field(name='Il',
+                        value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"),
+                        inline=True)
+        embed.add_field(name='Alle',
+                        value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"),
+                        inline=True)
         try:
             embed.add_field(name='Gestito da', value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
                             inline=True)
