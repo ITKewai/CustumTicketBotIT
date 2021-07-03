@@ -71,6 +71,7 @@ class ticket(commands.Cog):
         self.n = '\n'
         self._load_db.start()
         locale.setlocale(locale.LC_ALL, 'it_IT.utf8')
+        self.createing_ticket = {}
 
     @tasks.loop(count=1)
     async def _load_db(self):
@@ -599,6 +600,10 @@ class ticket(commands.Cog):
                                                         'ticket_title_mode': literal_eval(y['ticket_title_mode']),
                                                         'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                         }
+                try:
+                    x = self.createing_ticket[int(y['server_id'])]
+                except KeyError:
+                    self.createing_ticket[int(y['server_id'])] = False
         else:
             await cursor.execute(f'SELECT * FROM tickets_config WHERE server_id = {only_guild};')
             y = await cursor.fetchone()
@@ -621,6 +626,10 @@ class ticket(commands.Cog):
                                                     'ticket_title_mode': literal_eval(y['ticket_title_mode']),
                                                     'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                     }
+            try:
+                x = self.createing_ticket[int(y['server_id'])]
+            except KeyError:
+                self.createing_ticket[int(y['server_id'])] = False
         disconn.close()
 
     async def first_scan_db(self):
@@ -1025,6 +1034,9 @@ class ticket(commands.Cog):
             return f"{ticket_number}-{name}-{translate_fronts(reference)}"
 
     async def create_ticket(self, guild_id: int, user_id: int, ticket_reference: str):
+        while self.createing_ticket[guild_id]:
+            await asyncio.sleep(1)
+        self.createing_ticket[guild_id] = True
         # LOADING OFFLINE DATABASE
         ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id'][ticket_reference]
         category = self.bot.get_channel(ticket_general_category_id)
@@ -1104,6 +1116,7 @@ class ticket(commands.Cog):
 
         await self.load_db_var(guild_id)
         disconn.close()
+        self.createing_ticket[guild_id] = False
 
     async def add_support_role(self, guild_id: int, roles, ticket_reference: str):
         disconn = await aiomysql.connect(host=host,
