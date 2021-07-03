@@ -183,17 +183,18 @@ class ticket(commands.Cog):
 
     @commands.group(aliases=['tk'], description='GRUPPO COMANDI TICKET', invoke_without_command=True)
     async def ticket(self, ctx):
+        embed = discord.Embed(title=f"", colour=discord.Colour(0xFCFCFC))
         value = ''
         for c in self.bot.get_cog('ticket').get_commands():
             if not c.hidden:
-                try:
-                    if self.bot.get_command(c.name).commands:
-                        for a in self.bot.get_command(c.name).commands:
-                            value += f'`{c.name} {a.name}` - {a.description}\n'
-                except:
-                    import sys
-                    sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
-        await ctx.send(value + 'TICKET IN BETA-TEST')
+                if self.bot.get_command(c.name).commands:
+                    for a in self.bot.get_command(c.name).commands:
+                        value += f'**•`{c.name} {a.name}`** - {a.description}\n'
+        embed.add_field(name=f"Lista comandi Ticket", value=value, inline=False)
+        try:
+            await ctx.send(embed=embed)
+        except:
+            await ctx.send(f"Lista comandi Ticket\n{value}")
 
     @ticket.command(name='setup', description='Avvia la modalità di configurazione ticket')
     @commands.has_permissions(manage_messages=True)
@@ -545,13 +546,16 @@ class ticket(commands.Cog):
             #         except discord.errors.NotFound:
             #             pass  # ctx.channel is deleted...
 
-    @commands.command(hidden=True)
+    @commands.command(hidden=True, description='delete all channels in ticket_test_server')
     @commands.is_owner()
     async def delete(self, ctx):
         await self.ready_db()
-        for channel in ctx.guild.channels:
-            await channel.delete()
-        await ctx.guild.create_text_channel(name='TEST_SERVER')
+        if ctx.guild.id == 831552128778502234:
+            for channel in ctx.guild.channels:
+                await channel.delete()
+            await ctx.guild.create_text_channel(name='TEST_SERVER')
+        else:
+            pass
 
     async def load_db_var(self, only_guild=None):
         disconn = await aiomysql.connect(host=host,
@@ -1316,6 +1320,7 @@ class ticket(commands.Cog):
             return 'Solo chi ha un ruolo support può usare questo comando!'
 
     async def transcript(self, channel):
+        # from https://github.com/ITKewai/discord-transcript-bot-python
         css = '''
             body {
             background-color: #36393e;
@@ -1515,6 +1520,16 @@ class ticket(commands.Cog):
         </html>
         '''
         return discord.File(fp=io.StringIO(f), filename='transcript.html')
+
+    async def cog_command_error(self, ctx, error):
+        import sys
+        sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
+        try:
+            await self.bot.get_channel(714813858530721862).send('# # # cogs.ticket # # #' +
+                                                                traceback.format_exc() +
+                                                                '# # # cogs.ticket # # #')
+        except AttributeError:
+            pass
 
     # TODO: AGGIUNGERE REASON meh..
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
