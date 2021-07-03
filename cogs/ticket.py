@@ -1186,7 +1186,7 @@ class ticket(commands.Cog):
             return m.channel == channel and not m.author.bot
 
         try:
-            _no_message_sent = await self.bot.wait_for("message", timeout=60.0*5, check=check_interaction)
+            _no_message_sent = await self.bot.wait_for("message", timeout=5.0, check=check_interaction)
             return await channel.send(' ! Rilevata interazionecon il ticket, annullo la chiusura')
         except asyncio.TimeoutError:
             pass
