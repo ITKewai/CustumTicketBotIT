@@ -529,22 +529,21 @@ class ticket(commands.Cog):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
             await ctx.message.delete()
-            await self.transcript(ctx.channel)
-            # # fai check siamo in un ticket , TODO: aggiungere conferma chusura
-            # ticket_reference = await self.return_ticket_reference(guild_id=ctx.guild.id,
-            #                                                       name_of_table='ticket_reaction_lock_ids',
-            #                                                       element=ctx.channel.id)
-            # message_id = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids'][ticket_reference]
-            # for x, y in message_id.copy().items():
-            #     if y == ctx.channel.id:
-            #         try:
-            #             return await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
-            #                                                           channel_id=ctx.channel.id,
-            #                                                           closer_user_id=ctx.author.id,
-            #                                                           message_id=x,
-            #                                                           ticket_reference=ticket_reference))
-            #         except discord.errors.NotFound:
-            #             pass  # ctx.channel is deleted...
+            ticket_reference = await self.return_ticket_reference(guild_id=ctx.guild.id,
+                                                                  name_of_table='ticket_reaction_lock_ids',
+                                                                  element=ctx.channel.id)
+            if ticket_reference:
+                message_id = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids'][ticket_reference]
+                for x, y in message_id.copy().items():
+                    if y == ctx.channel.id:
+                        try:
+                            return await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
+                                                                          channel_id=ctx.channel.id,
+                                                                          closer_user_id=ctx.author.id,
+                                                                          message_id=x,
+                                                                          ticket_reference=ticket_reference))
+                        except discord.errors.NotFound:
+                            pass  # ctx.channel is deleted...
 
     @commands.command(hidden=True, description='delete all channels in ticket_test_server')
     @commands.is_owner()
