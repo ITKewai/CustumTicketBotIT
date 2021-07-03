@@ -1,4 +1,5 @@
 import asyncio
+import io
 from datetime import datetime, timezone
 import locale
 import traceback
@@ -172,7 +173,6 @@ class ticket(commands.Cog):
                                         pass
 
                             except asyncio.TimeoutError:
-                                print(asyncio.TimeoutError)
                                 await message.clear_reaction('❌')
                                 await message.clear_reaction('✅')
                                 return
@@ -528,21 +528,22 @@ class ticket(commands.Cog):
         await self.ready_db()
         if await self.ticket_enabled(ctx.guild.id):
             await ctx.message.delete()
-            # fai check siamo in un ticket , TODO: aggiungere conferma chusura
-            ticket_reference = await self.return_ticket_reference(guild_id=ctx.guild.id,
-                                                                  name_of_table='ticket_reaction_lock_ids',
-                                                                  element=ctx.channel.id)
-            message_id = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids'][ticket_reference]
-            for x, y in message_id.copy().items():
-                if y == ctx.channel.id:
-                    try:
-                        return await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
-                                                                      channel_id=ctx.channel.id,
-                                                                      closer_user_id=ctx.author.id,
-                                                                      message_id=x,
-                                                                      ticket_reference=ticket_reference))
-                    except discord.errors.NotFound:
-                        pass  # ctx.channel is deleted...
+            await self.transcript(ctx.channel)
+            # # fai check siamo in un ticket , TODO: aggiungere conferma chusura
+            # ticket_reference = await self.return_ticket_reference(guild_id=ctx.guild.id,
+            #                                                       name_of_table='ticket_reaction_lock_ids',
+            #                                                       element=ctx.channel.id)
+            # message_id = self.db_offline[ctx.guild.id]['ticket_reaction_lock_ids'][ticket_reference]
+            # for x, y in message_id.copy().items():
+            #     if y == ctx.channel.id:
+            #         try:
+            #             return await ctx.send(await self.close_ticket(guild_id=ctx.guild.id,
+            #                                                           channel_id=ctx.channel.id,
+            #                                                           closer_user_id=ctx.author.id,
+            #                                                           message_id=x,
+            #                                                           ticket_reference=ticket_reference))
+            #         except discord.errors.NotFound:
+            #             pass  # ctx.channel is deleted...
 
     @commands.command(hidden=True)
     @commands.is_owner()
@@ -676,7 +677,7 @@ class ticket(commands.Cog):
                 ticket_reference = await self.bot.wait_for("message", timeout=60.0, check=check)
                 ticket_reference = ticket_reference.content.split(' ')[0].upper()
             except asyncio.TimeoutError:
-                return
+                return 'Tempo scaduto.'
 
         if exist != 1:
             overwrites = await self.return_overwrites(guild=ctx.guild, everyone=True)
@@ -1176,7 +1177,17 @@ class ticket(commands.Cog):
         guild = self.bot.get_guild(guild_id)
         channel = self.bot.get_channel(channel_id)
         await channel.send(embed=discord.Embed(title='Chiusura ticket in 5 secondi...', colour=discord.Colour.red()))
-        await asyncio.sleep(5)
+
+        def check_interaction(m):
+            return m.channel == channel and not m.author.bot
+
+        try:
+            _no_message_sent = await self.bot.wait_for("message", timeout=60.0*5, check=check_interaction)
+            return await channel.send(' ! Rilevata interazionecon il ticket, annullo la chiusura')
+        except asyncio.TimeoutError:
+            pass
+
+        file = await self.transcript(channel=channel)
         await channel.delete()
 
         # SEND LOG CHANNEL INFO
@@ -1219,7 +1230,7 @@ class ticket(commands.Cog):
         except:
             pass
 
-        await _channel.send(embed=embed)
+        await _channel.send(embed=embed, file=file)
         # UPDATE OFFLINE DB
         self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].pop(message_id)
         self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].pop(message_id)
@@ -1304,7 +1315,207 @@ class ticket(commands.Cog):
         else:
             return 'Solo chi ha un ruolo support può usare questo comando!'
 
-    # TODO: CREARE LOG MESSAGGI MANDATI QUANDO CHIUDO TICKET
+    async def transcript(self, channel):
+        css = '''
+            body {
+            background-color: #36393e;
+            color: #dcddde;
+            }
+            a {
+                color: #0096cf;
+            }
+            .info {
+                display: flex;
+                max-width: 100%;
+                margin: 0 5px 10px;
+            }
+            .guild-icon-container {
+                flex: 0;
+            }
+            .guild-icon {
+                max-width: 88px;
+                max-height: 88px;
+            }
+            .metadata {
+                flex: 1;
+                margin-left: 10px;
+            }
+            .guild-name {
+                font-size: 1.4em;
+            }
+            .channel-name {
+                font-size: 1.2em;
+            }
+            .channel-topic {
+                margin-top: 2px;
+            }
+            .channel-message-count {
+                margin-top: 2px;
+            }
+            .chatlog {
+                max-width: 100%;
+                margin-bottom: 24px;
+            }
+            .message-group {
+                display: flex;
+                margin: 0 10px;
+                padding: 15px 0;
+                border-top: 1px solid;
+            }
+            .author-avatar-container {
+                flex: 0;
+                width: 40px;
+                height: 40px;
+            }
+            .author-avatar {
+                border-radius: 50%;
+                height: 40px;
+                width: 40px;
+            }
+            .messages {
+                flex: 1;
+                min-width: 50%;
+                margin-left: 20px;
+            }
+            .author-name {
+                font-size: 1em;
+                font-weight: 500;
+            }
+            .timestamp {
+                margin-left: 5px;
+                font-size: 0.75em;
+            }
+            .message {
+                padding: 2px 5px;
+                margin-right: -5px;
+                margin-left: -5px;
+                background-color: transparent;
+                transition: background-color 1s ease;
+            }
+            .content {
+                font-size: 0.9375em;
+                word-wrap: break-word;
+            }
+            .mention {
+                color: #7289da;
+            }
+        '''
+
+        def check_message_mention(msgs: discord.Message):
+            user_mentions: list = msgs.mentions
+            role_mentions: list = msgs.role_mentions
+            channel_mentions: list = msgs.channel_mentions
+            total_mentions: list = user_mentions + role_mentions + channel_mentions
+            m: str = msgs.content
+            for mentions in total_mentions:
+                if mentions in user_mentions:
+                    for mention in user_mentions:
+                        m = m.replace(str(f"<@{mention.id}>"),
+                                      f"<span class=\"mention\">@{mention.name}</span>")
+                        m = m.replace(str(f"<@!{mention.id}>"),
+                                      f"<span class=\"mention\">@{mention.name}</span>")
+                elif mentions in role_mentions:
+                    for mention in role_mentions:
+                        m = m.replace(str(f"<@&{mention.id}>"),
+                                      f"<span class=\"mention\">@{mention.name}</span>")
+                elif mentions in channel_mentions:
+                    for mention in channel_mentions:
+                        m = m.replace(str(f"<#{mention.id}>"),
+                                      f"<span class=\"mention\">#{mention.name}</span>")
+                else:
+                    pass
+            return m
+
+        messages: discord.TextChannel.history = await channel.history(limit=None, oldest_first=True).flatten()
+        f = f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset=utf-8>
+                <meta name=viewport content="width=device-width">
+                <style>
+                    {css}
+                </style>
+            </head>
+            <body>
+                <div class=info>
+                    <div class=guild-icon-container><img class=guild-icon src={channel.guild.icon_url}></div>
+                    <div class=metadata>
+                        <div class=guild-name>{channel.guild.name}</div>
+                        <div class=channel-name>{channel.name}</div>
+                        <div class=channel-message-count>{len(messages)} messaggi totali</div>
+                    </div>
+                </div>
+            '''
+        for message in messages:
+            if message.embeds:
+                content = 'Embed'
+
+            elif message.attachments:
+                # IS AN IMAGE:
+                if message.attachments[0].url.endswith(('jpg', 'png', 'gif', 'bmp')):
+                    if message.content:
+                        content = check_message_mention(
+                            message) + '<br>' + f"<img src=\"{message.attachments[0].url}\" width=\"200\" alt=\"Attachment\" \\>"
+                    else:
+                        content = f"<img src=\"{message.attachments[0].url}\" width=\"200\" alt=\"Attachment\" \\>"
+
+                # IS A VIDEO
+                elif message.attachments[0].url.endswith(('mp4', 'ogg', 'flv', 'mov', 'avi')):
+                    if message.content:
+                        content = check_message_mention(message) + '<br>' + f'''
+                        <video width="320" height="240" controls>
+                          <source src="{message.attachments[0].url}" type="video/{message.attachments[0].url[-3:]}">
+                        Your browser does not support the video.
+                        </video>
+                        '''
+                    else:
+                        content = f'''
+                        <video width="320" height="240" controls>
+                          <source src="{message.attachments[0].url}" type="video/{message.attachments[0].url[-3:]}">
+                        Your browser does not support the video.
+                        </video>
+                        '''
+                elif message.attachments[0].url.endswith(('mp3', 'boh')):
+                    if message.content:
+                        content = check_message_mention(message) + '<br>' + f'''
+                        <audio controls>
+                          <source src="{message.attachments[0].url}" type="audio/{message.attachments[0].url[-3:]}">
+                        Your browser does not support the audio element.
+                        </audio>
+                        '''
+                    else:
+                        content = f'''
+                        <audio controls>
+                          <source src="{message.attachments[0].url}" type="audio/{message.attachments[0].url[-3:]}">
+                        Your browser does not support the audio element.
+                        </audio>
+                        '''
+                # OTHER TYPE OF FILES
+                else:
+                    # add things
+                    pass
+            else:
+                content = check_message_mention(message)
+
+            f += f'''
+                <div class="message-group">
+                    <div class="author-avatar-container"><img class=author-avatar src={message.author.avatar_url}></div>
+                    <div class="messages">
+                        <span class="author-name" >{message.author.name}</span><span class="timestamp">{message.created_at.strftime("%b %d, %Y %H:%M")}</span>
+                        <div class="message">
+                            <div class="content"><span class="markdown">{content}</span></div>
+                        </div>
+                    </div>
+                </div>
+                '''
+        f += '''
+                </div>
+            </body>
+        </html>
+        '''
+        return discord.File(fp=io.StringIO(f), filename='transcript.html')
+
     # TODO: AGGIUNGERE REASON meh..
     # TODO: POSSIBILITA DI RIAPRIRE I TICKET ENTRO 2 MINUTI DALLA CHISURA meh...
     # TODO: COMANDO ADD PER AGGIUNGERE UTENTE AL TICKET (*kwargs user) meh...
