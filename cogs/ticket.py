@@ -1305,7 +1305,11 @@ class ticket(commands.Cog):
                                                                           ), }
 
         if member:
-            overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True, )
+            overwrites[member] = discord.PermissionOverwrite(read_messages=True,
+                                                             send_messages=True,
+                                                             embed_links=True,
+                                                             attach_files=True,
+                                                             read_message_history=True)
 
         if roles_ids:
             for role in roles_ids:
@@ -1313,7 +1317,11 @@ class ticket(commands.Cog):
                 role_obj = guild.get_role(role)
                 if role_obj:
                     if add:
-                        overwrites[role_obj] = discord.PermissionOverwrite(read_messages=True, send_messages=True, )
+                        overwrites[role_obj] = discord.PermissionOverwrite(read_messages=True,
+                                                                           send_messages=True,
+                                                                           embed_links=True,
+                                                                           attach_files=True,
+                                                                           read_message_history=True)
                     else:
                         overwrites.pop(role_obj, None)
         return overwrites
