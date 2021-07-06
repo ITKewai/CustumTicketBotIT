@@ -1,0 +1,8 @@
+venv/*
+cogs/__pycache__/*
+file.html
+.idea/*
+cogs/polizia.py
+cogs/cloner.py
+2.py
+discord.log

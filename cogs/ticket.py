@@ -71,7 +71,7 @@ class ticket(commands.Cog):
         self.n = '\n'
         self._load_db.start()
         locale.setlocale(locale.LC_ALL, 'it_IT.utf8')
-        self.createing_ticket = {}
+        self.creating_ticket = {}
 
     @tasks.loop(count=1)
     async def _load_db(self):
@@ -601,9 +601,9 @@ class ticket(commands.Cog):
                                                         'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                         }
                 try:
-                    x = self.createing_ticket[int(y['server_id'])]
+                    x = self.creating_ticket[int(y['server_id'])]
                 except KeyError:
-                    self.createing_ticket[int(y['server_id'])] = False
+                    self.creating_ticket[int(y['server_id'])] = False
         else:
             await cursor.execute(f'SELECT * FROM tickets_config WHERE server_id = {only_guild};')
             y = await cursor.fetchone()
@@ -627,9 +627,9 @@ class ticket(commands.Cog):
                                                     'ticket_multiple': literal_eval(y['ticket_multiple'])
                                                     }
             try:
-                x = self.createing_ticket[int(y['server_id'])]
+                x = self.creating_ticket[int(y['server_id'])]
             except KeyError:
-                self.createing_ticket[int(y['server_id'])] = False
+                self.creating_ticket[int(y['server_id'])] = False
         disconn.close()
 
     async def first_scan_db(self):
@@ -1034,89 +1034,100 @@ class ticket(commands.Cog):
             return f"{ticket_number}-{name}-{translate_fronts(reference)}"
 
     async def create_ticket(self, guild_id: int, user_id: int, ticket_reference: str):
-        while self.createing_ticket[guild_id]:
+        while self.creating_ticket[guild_id]:
             await asyncio.sleep(1)
-        self.createing_ticket[guild_id] = True
-        # LOADING OFFLINE DATABASE
-        ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id'][ticket_reference]
-        category = self.bot.get_channel(ticket_general_category_id)
-        ticket_count = self.db_offline[guild_id]['ticket_count'][ticket_reference] + 1
-        ticket_settings = self.db_offline[guild_id]['ticket_settings'][ticket_reference]
-        ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
-        ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference]
-        ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id'][ticket_reference]
-        ticket_title_mode = self.db_offline[guild_id]['ticket_title_mode'][ticket_reference]
-        ticket_multiple = self.db_offline[guild_id]['ticket_multiple'][ticket_reference]
+        try:
+            self.creating_ticket[guild_id] = True
+            # LOADING OFFLINE DATABASE
+            ticket_general_category_id = self.db_offline[guild_id]['ticket_general_category_id'][ticket_reference]
+            category = self.bot.get_channel(ticket_general_category_id)
+            ticket_count = self.db_offline[guild_id]['ticket_count'][ticket_reference] + 1
+            ticket_settings = self.db_offline[guild_id]['ticket_settings'][ticket_reference]
+            ticket_support_roles = self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
+            ticket_reaction_lock_ids = self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference]
+            ticket_owner_id = self.db_offline[guild_id]['ticket_owner_id'][ticket_reference]
+            ticket_title_mode = self.db_offline[guild_id]['ticket_title_mode'][ticket_reference]
+            ticket_multiple = self.db_offline[guild_id]['ticket_multiple'][ticket_reference]
 
-        guild = self.bot.get_guild(guild_id)
-        member = guild.get_member(user_id)
-        # END
-        # CHECK IF TICKET ALREADY EXIST
-        if not ticket_multiple:
-            if user_id in ticket_owner_id.values():
-                # TRY TO MENTION USER IN HIS OWN TICKET
-                try:
-                    # ticket_owner_id[message.id] = user_id
-                    oof = [k for k, v in self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].items() if
-                           v == user_id]
-                    if oof:
-                        channel = self.bot.get_channel(
-                            self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
-                        if channel:
-                            await channel.send(member.mention +
-                                               '```diff\n-Hai già un ticket aperto utilizza questo! ```')
-                            return
+            guild = self.bot.get_guild(guild_id)
+            member = guild.get_member(user_id)
+            # END
+            # CHECK IF TICKET ALREADY EXIST
+            if not ticket_multiple:
+                if user_id in ticket_owner_id.values():
+                    # TRY TO MENTION USER IN HIS OWN TICKET
+                    try:
+                        # ticket_owner_id[message.id] = user_id
+                        oof = [k for k, v in self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].items() if
+                               v == user_id]
+                        if oof:
+                            channel = self.bot.get_channel(
+                                self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference][oof[0]])
+                            if channel:
+                                await channel.send(member.mention +
+                                                   '```diff\n-Hai già un ticket aperto utilizza questo! ```')
+                                return
 
-                except:
-                    await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
-                    return
+                    except:
+                        await member.send(member.mention + '```diff\n-ERRORE: RIPROVA PIU\' TARDI ```')
+                        return
 
-                    # END
+                        # END
 
-        # TICKET CHANNEL RELATED
+            # TICKET CHANNEL RELATED
 
-        ticket_title = await self.return_ticket_title_format(ticket_reference=ticket_reference,
-                                                             ticket_number=ticket_count,
-                                                             name=member.name,
-                                                             ticket_title_mode=ticket_title_mode)
-        overwrites = await self.return_overwrites(guild=guild,
-                                                  member=member,
-                                                  roles_ids=ticket_support_roles if ticket_support_roles else None,
-                                                  everyone=False)
+            ticket_title = await self.return_ticket_title_format(ticket_reference=ticket_reference,
+                                                                 ticket_number=ticket_count,
+                                                                 name=member.name,
+                                                                 ticket_title_mode=ticket_title_mode)
+            overwrites = await self.return_overwrites(guild=guild,
+                                                      member=member,
+                                                      roles_ids=ticket_support_roles if ticket_support_roles else None,
+                                                      everyone=False)
 
-        channel = await guild.create_text_channel(ticket_title, overwrites=overwrites, category=category,
-                                                  reason=None)
+            channel = await guild.create_text_channel(ticket_title, overwrites=overwrites, category=category,
+                                                      reason=None)
 
-        embed = discord.Embed(title="", description=ticket_settings,
-                              colour=discord.Colour.green())
+            embed = discord.Embed(title="", description=ticket_settings,
+                                  colour=discord.Colour.green())
 
-        message = await channel.send(member.mention, embed=embed)
-        # END
+            message = await channel.send(member.mention, embed=embed)
+            # END
 
-        # UPDATE DATABASE DATA
-        ticket_reaction_lock_ids[message.id] = channel.id
-        ticket_owner_id[message.id] = user_id
-        self.db_offline[guild_id]['ticket_count'][ticket_reference] = self.db_offline[guild_id]['ticket_count'][
-                                                                          ticket_reference] + 1
+            # UPDATE DATABASE DATA
+            ticket_reaction_lock_ids[message.id] = channel.id
+            ticket_owner_id[message.id] = user_id
+            self.db_offline[guild_id]['ticket_count'][ticket_reference] = self.db_offline[guild_id]['ticket_count'][
+                                                                              ticket_reference] + 1
 
-        await message.add_reaction('🔒')
-        disconn = await aiomysql.connect(host=host,
-                                         port=port,
-                                         user=user,
-                                         password=password,
-                                         db=db,
-                                         autocommit=True)
-        cursor = await disconn.cursor(aiomysql.DictCursor)
-        await cursor.execute(f'UPDATE tickets_config SET ticket_count = %s, ticket_reaction_lock_ids = %s, '
-                             f'ticket_owner_id = %s WHERE server_id = %s;',
-                             (str(self.db_offline[guild_id]['ticket_count']),
-                              str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
-                              str(self.db_offline[guild_id]['ticket_owner_id']),
-                              guild.id), )
+            await message.add_reaction('🔒')
+            disconn = await aiomysql.connect(host=host,
+                                             port=port,
+                                             user=user,
+                                             password=password,
+                                             db=db,
+                                             autocommit=True)
+            cursor = await disconn.cursor(aiomysql.DictCursor)
+            await cursor.execute(f'UPDATE tickets_config SET ticket_count = %s, ticket_reaction_lock_ids = %s, '
+                                 f'ticket_owner_id = %s WHERE server_id = %s;',
+                                 (str(self.db_offline[guild_id]['ticket_count']),
+                                  str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
+                                  str(self.db_offline[guild_id]['ticket_owner_id']),
+                                  guild.id), )
 
-        await self.load_db_var(guild_id)
-        disconn.close()
-        self.createing_ticket[guild_id] = False
+            await self.load_db_var(guild_id)
+            disconn.close()
+        except:
+            import sys
+            sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
+            try:
+                await self.bot.get_channel(714813858530721862).send(f'`# # # cogs.ticket {guild_id} # # #`' +
+                                                                    traceback.format_exc() +
+                                                                    '`# # # cogs.ticket # # #`')
+            except:
+                pass
+        finally:
+            self.creating_ticket[guild_id] = False
 
     async def add_support_role(self, guild_id: int, roles, ticket_reference: str):
         disconn = await aiomysql.connect(host=host,
@@ -1272,6 +1283,10 @@ class ticket(commands.Cog):
         # UPDATE OFFLINE DB
         self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].pop(message_id)
         self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].pop(message_id)
+        try:
+            self.db_offline[guild_id]['ticket_claim_user_id'][ticket_reference].pop(channel.id)
+        except KeyError:
+            pass
         disconn = await aiomysql.connect(host=host,
                                          port=port,
                                          user=user,
@@ -1281,9 +1296,10 @@ class ticket(commands.Cog):
         cursor = await disconn.cursor(aiomysql.DictCursor)
 
         await cursor.execute(f'UPDATE tickets_config SET ticket_reaction_lock_ids = %s, '
-                             f'ticket_owner_id = %s WHERE server_id = %s;',
+                             f'ticket_owner_id = %s, ticket_claim_user_id = %s WHERE server_id = %s;',
                              (str(self.db_offline[guild_id]['ticket_reaction_lock_ids']),
-                              str(self.db_offline[guild_id]['ticket_owner_id']), guild.id), )
+                              str(self.db_offline[guild_id]['ticket_owner_id']),
+                              str(self.db_offline[guild_id]['ticket_claim_user_id']), guild.id), )
 
         await self.load_db_var(guild_id)
         disconn.close()
