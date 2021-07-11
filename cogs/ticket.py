@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import locale
 import traceback
 from ast import literal_eval
+import chat_exporter
 
 try:
     from data.config import *
@@ -131,7 +132,7 @@ class ticket(commands.Cog):
 
                             def check(raw_payload):
                                 return raw_payload.member and str(raw_payload.emoji) in ['❌', '✅'] \
-                                       and \
+                                       and raw_payload.channel_id == payload.channel_id and \
                                        (raw_payload.user_id == ticket_owner or
                                         any(role for role in ticket_support if
                                             role in [role.id for role in raw_payload.member.roles])
@@ -181,6 +182,34 @@ class ticket(commands.Cog):
                     # TODO: AGGIUNGERE ANTI SPAM REACTION
                     import sys
                     sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
+
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel):
+        if channel.guild.id in self.db_offline:
+            ticket_reference = await self.return_ticket_reference(guild_id=channel.guild.id,
+                                                                  name_of_table='ticket_reaction_lock_ids',
+                                                                  element=channel.id)
+            if ticket_reference:
+                closer_user_id = await self.get_who_deleted_channel(channel)
+
+                if closer_user_id == self.bot.user.id:
+                    return
+
+                try:
+                    message_close_id = await self.return_reaction_lock_id_from_channel_id(guild_id=channel.guild.id,
+                                                                                          channel_id=channel.id,
+                                                                                          ticket_reference=ticket_reference)
+                    await self.close_ticket(guild_id=channel.guild.id,
+                                            channel_id=channel.id,
+                                            closer_user_id=closer_user_id,
+                                            message_id=message_close_id,
+                                            ticket_reference=ticket_reference,
+                                            forced=True)
+                except:
+                    import sys
+                    sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
+                    pass
+        pass
 
     @commands.group(aliases=['tk'], description='GRUPPO COMANDI TICKET', invoke_without_command=True)
     async def ticket(self, ctx):
@@ -872,6 +901,11 @@ class ticket(commands.Cog):
             if y == tick_message:
                 return z
 
+    async def return_reaction_lock_id_from_channel_id(self, guild_id: int, channel_id: int, ticket_reference: str):
+        for y, z in self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].items():
+            if z == channel_id:
+                return y
+
     async def return_ticket_support_roles_id(self, guild_id: int, ticket_reference: str):
         return self.db_offline[guild_id]['ticket_support_roles'][ticket_reference]
 
@@ -1199,7 +1233,7 @@ class ticket(commands.Cog):
             await channel_log.edit(overwrites=overwrites)
 
     async def close_ticket(self, guild_id: int, channel_id: int, closer_user_id: int, message_id: int,
-                           ticket_reference):
+                           ticket_reference: str, forced: bool = False):
         # ASK FOR REFERENCE
         # ticket_reference = await self.return_ticket_reference(guild_id=guild_id,
         #                                                       name_of_table='ticket_reaction_lock_ids',
@@ -1215,76 +1249,141 @@ class ticket(commands.Cog):
 
         # CLOSE TICKET CHANNEL
         guild = self.bot.get_guild(guild_id)
-        channel = self.bot.get_channel(channel_id)
-        await channel.send(embed=discord.Embed(title='Chiusura ticket in 5 secondi...', colour=discord.Colour.red()))
+        if not forced:
+            channel = self.bot.get_channel(channel_id)
+            try:
+                await channel.send(
+                    embed=discord.Embed(description=f'<@{closer_user_id}> Ha richiesto la chiusura ticket,\n '
+                                                    f'Questo ticket verrà chiuso tra 10 secondi...',
+                                        colour=discord.Colour.red()), delete_after=10.0)
+            except:
+                pass
 
-        def check_interaction(m):
-            return m.channel == channel and not m.author.bot
+            def check_interaction(m):
+                return m.channel == channel and not m.author.bot
 
-        try:
-            _no_message_sent = await self.bot.wait_for("message", timeout=5.0, check=check_interaction)
-            await channel.send(' ! Rilevata interazionecon il ticket, annullo la chiusura')
-            return
-        except asyncio.TimeoutError:
-            pass
+            try:
+                _no_message_sent = await self.bot.wait_for("message", timeout=10.0, check=check_interaction)
+                await channel.send(embed=discord.Embed(description=f'<@{closer_user_id}> È stata rilevata interazione con'
+                                                                   f' il ticket, chiusura annullata.',
+                                                       colour=discord.Colour.red()))
+                return
+            except asyncio.TimeoutError:
+                pass
 
-        file = await self.transcript(channel=channel)
-        await channel.delete()
+            # file = await self.transcript(channel=channel)
+            file = await chat_exporter.export(channel)
+            file = discord.File(io.BytesIO(file.encode()),
+                                filename=f"transcript-{channel.name}.html")
+            await channel.delete()
 
         # SEND LOG CHANNEL INFO
-        _channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
+            _channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
 
-        if not _channel:
-            disconn = await aiomysql.connect(host=host,
-                                             port=port,
-                                             user=user,
-                                             password=password,
-                                             db=db,
-                                             autocommit=True)
+            if not _channel:
+                disconn = await aiomysql.connect(host=host,
+                                                 port=port,
+                                                 user=user,
+                                                 password=password,
+                                                 db=db,
+                                                 autocommit=True)
 
-            cursor = await disconn.cursor(aiomysql.DictCursor)
+                cursor = await disconn.cursor(aiomysql.DictCursor)
 
-            overwrites = await self.return_overwrites(guild=guild, everyone=False)
-            _channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢',
-                                                       overwrites=overwrites,
-                                                       category=category,
-                                                       reason=None)
-            offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
+                overwrites = await self.return_overwrites(guild=guild, everyone=False)
+                _channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢',
+                                                           overwrites=overwrites,
+                                                           category=category,
+                                                           reason=None)
+                offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
 
-            offline_ticket_general_log_channel[ticket_reference] = _channel.id
-            await cursor.execute("UPDATE tickets_config SET ticket_general_log_channel = %s WHERE server_id = %s;",
-                                 (str(offline_ticket_general_log_channel), guild.id))
-            disconn.close()
+                offline_ticket_general_log_channel[ticket_reference] = _channel.id
+                await cursor.execute("UPDATE tickets_config SET ticket_general_log_channel = %s WHERE server_id = %s;",
+                                     (str(offline_ticket_general_log_channel), guild.id))
+                disconn.close()
 
-        open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][ticket_reference][message_id])
-        closer_user_obj = self.bot.get_user(closer_user_id)
-        embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
-        embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
-        embed.add_field(name='Il',
-                        value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"),
-                        inline=True)
-        embed.add_field(name='Alle',
-                        value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"),
-                        inline=True)
-        embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
-        embed.add_field(name='Il',
-                        value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"),
-                        inline=True)
-        embed.add_field(name='Alle',
-                        value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"),
-                        inline=True)
-        try:
-            embed.add_field(name='Gestito da', value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
+            open_user_obj = self.bot.get_user(self.db_offline[guild_id]['ticket_owner_id'][ticket_reference][message_id])
+            closer_user_obj = self.bot.get_user(closer_user_id)
+            embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
+            embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=True)
+            embed.add_field(name='Il',
+                            value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"),
                             inline=True)
-        except:
-            pass
+            embed.add_field(name='Alle',
+                            value=channel.created_at.replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"),
+                            inline=True)
+            embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
+            embed.add_field(name='Il',
+                            value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%m/%d/%Y"),
+                            inline=True)
+            embed.add_field(name='Alle',
+                            value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime("%H:%M:%S"),
+                            inline=True)
+            try:
+                embed.add_field(name='Gestito da', value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
+                                inline=True)
+            except:
+                pass
 
-        await _channel.send(embed=embed, file=file)
+                await _channel.send(embed=embed, file=file)
+        else:
+            # DELETED VIA EVENT
+            # SEND LOG CHANNEL INFO
+            _channel = self.bot.get_channel(self.db_offline[guild_id]['ticket_general_log_channel'][ticket_reference])
+
+            if not _channel:
+                disconn = await aiomysql.connect(host=host,
+                                                 port=port,
+                                                 user=user,
+                                                 password=password,
+                                                 db=db,
+                                                 autocommit=True)
+
+                cursor = await disconn.cursor(aiomysql.DictCursor)
+
+                overwrites = await self.return_overwrites(guild=guild, everyone=False)
+                _channel = await guild.create_text_channel('🗂｜𝗔𝗥𝗖𝗛𝗜𝗩𝗜𝗢',
+                                                           overwrites=overwrites,
+                                                           category=category,
+                                                           reason=None)
+                offline_ticket_general_log_channel = self.db_offline[guild.id]['ticket_general_log_channel']
+
+                offline_ticket_general_log_channel[ticket_reference] = _channel.id
+                await cursor.execute("UPDATE tickets_config SET ticket_general_log_channel = %s WHERE server_id = %s;",
+                                     (str(offline_ticket_general_log_channel), guild.id))
+                disconn.close()
+
+            open_user_obj = self.bot.get_user(
+                self.db_offline[guild_id]['ticket_owner_id'][ticket_reference][message_id])
+            closer_user_obj = self.bot.get_user(closer_user_id)
+            embed = discord.Embed(title="Ticket Chiuso", description='', colour=discord.Colour.green())
+            embed.add_field(name='Aperto da', value=open_user_obj.mention, inline=False)
+
+            embed.add_field(name='Chiuso da', value=closer_user_obj.mention, inline=True)
+            embed.add_field(name='Il',
+                            value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime(
+                                "%m/%d/%Y"),
+                            inline=True)
+            embed.add_field(name='Alle',
+                            value=datetime.now().replace(tzinfo=timezone.utc).astimezone(tz=None).strftime(
+                                "%H:%M:%S"),
+                            inline=True)
+            embed.add_field(name='Tipo di chiusura:',
+                            value='**MANUALE & FORZATA senza interazione con il bot**',
+                            inline=False)
+            try:
+                embed.add_field(name='Gestito da',
+                                value=self.bot.get_user(ticket_claim_user_id[channel_id]).mention,
+                                inline=True)
+            except:
+                pass
+
+            await _channel.send(embed=embed)
         # UPDATE OFFLINE DB
         self.db_offline[guild_id]['ticket_reaction_lock_ids'][ticket_reference].pop(message_id)
         self.db_offline[guild_id]['ticket_owner_id'][ticket_reference].pop(message_id)
         try:
-            self.db_offline[guild_id]['ticket_claim_user_id'][ticket_reference].pop(channel.id)
+            self.db_offline[guild_id]['ticket_claim_user_id'][ticket_reference].pop(channel_id)
         except KeyError:
             pass
         disconn = await aiomysql.connect(host=host,
@@ -1579,6 +1678,11 @@ class ticket(commands.Cog):
         '''
         return discord.File(fp=io.StringIO(f), filename='transcript.html')
 
+    async def get_who_deleted_channel(self, channel):
+        async for entry in channel.guild.audit_logs(action=discord.AuditLogAction.channel_delete, limit=5):
+            if entry.target.id == channel.id:
+                return entry.user.id
+
     async def cog_command_error(self, ctx, error):
         import sys
         sys.stderr.write('# # # cogs.ticket # # #' + traceback.format_exc() + '# # # cogs.ticket # # #')
@@ -1595,6 +1699,7 @@ class ticket(commands.Cog):
     # TODO: OPZIONALE  SE MANDI UN MESSAGGIO IN PRIVATO AL BOT APRE UN DM TICKET meh...
     # TODO: OPZIONALE SE HA IN COMUNE PIU DI UN SERVER DISCORD CHIEDE IN QUALE APRIRE IL TICKET meh...
     # TODO: MIGLIORA return_ticket_reference CHEE è UNA MEDDA
+    # TODO: AGGIUNGERE COMANDO PER ELIMINARE PANNELLO E TICKET CORRELATI
 
 
 def setup(bot):
